@@ -1,0 +1,38 @@
+# Local stack with prod parity: Postgres + API + web.
+services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: training
+      POSTGRES_PASSWORD: training
+      POSTGRES_DB: training
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U training"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  api:
+    build: ./backend
+    environment:
+      DATABASE_URL: postgresql+asyncpg://training:training@db:5432/training
+      JWT_SECRET: dev-secret-change-me
+    ports:
+      - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+
+  web:
+    build: ./frontend
+    ports:
+      - "5173:80"
+    depends_on:
+      - api
+
+volumes:
+  pgdata:
