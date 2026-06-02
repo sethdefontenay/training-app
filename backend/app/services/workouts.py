@@ -12,6 +12,37 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import Exercise, Session, SetEntry
 
+
+async def progression(session: AsyncSession, slug: str) -> list[dict[str, object]]:
+    """Per-session-date top display, oldest to newest. Weighted -> heaviest 'N kg';
+    bodyweight -> best 'N reps'."""
+    ex = await session.scalar(select(Exercise).where(Exercise.slug == slug))
+    if ex is None:
+        return []
+    rows = (
+        await session.execute(
+            select(Session.date, SetEntry.weight, SetEntry.reps)
+            .join(SetEntry, SetEntry.session_id == Session.id)
+            .where(SetEntry.exercise_id == ex.id)
+            .order_by(Session.date)
+        )
+    ).all()
+    by_date: dict[date, list[tuple[str | None, str | None]]] = {}
+    for day, weight, reps in rows:
+        by_date.setdefault(day, []).append((weight, reps))
+
+    points: list[dict[str, object]] = []
+    for day in sorted(by_date):
+        weights = [f for f in (_to_float(w) for w, _ in by_date[day]) if f is not None]
+        if weights:
+            display = _format_weight(max(weights))
+        else:
+            reps_vals = [int(r) for _, r in by_date[day] if r and r.isdigit()]
+            display = f"{max(reps_vals)} reps" if reps_vals else NO_HISTORY
+        points.append({"date": day, "display": display})
+    return points
+
+
 NO_HISTORY = "—"
 BODYWEIGHT = "BW"
 

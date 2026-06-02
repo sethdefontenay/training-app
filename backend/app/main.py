@@ -2,7 +2,7 @@
 
 from fastapi import APIRouter, FastAPI
 
-from app.api import auth, workouts
+from app.api import auth, tracking, workouts
 from app.config import get_settings
 
 settings = get_settings()
@@ -32,5 +32,6 @@ async def ping() -> dict[str, str]:
 
 api_v1.include_router(auth.router)
 api_v1.include_router(workouts.router)
+api_v1.include_router(tracking.router)
 
 app.include_router(api_v1)
