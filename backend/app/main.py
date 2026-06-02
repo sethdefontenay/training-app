@@ -1,7 +1,8 @@
 """FastAPI application entrypoint."""
 
-from fastapi import FastAPI
+from fastapi import APIRouter, FastAPI
 
+from app.api import auth
 from app.config import get_settings
 
 settings = get_settings()
@@ -19,8 +20,9 @@ async def health() -> dict[str, str]:
     return {"status": "ok", "app": settings.app_name, "environment": settings.environment}
 
 
-# Versioned API surface lives under /api/v1 (routers added per feature phase).
-api_v1 = FastAPI(title="Training App API v1", version="0.1.0")
+# Versioned API surface. Use a router (NOT a mounted sub-app) so dependency overrides
+# and shared middleware apply uniformly.
+api_v1 = APIRouter(prefix="/api/v1")
 
 
 @api_v1.get("/ping", tags=["meta"])
@@ -28,4 +30,6 @@ async def ping() -> dict[str, str]:
     return {"pong": "ok"}
 
 
-app.mount("/api/v1", api_v1)
+api_v1.include_router(auth.router)
+
+app.include_router(api_v1)

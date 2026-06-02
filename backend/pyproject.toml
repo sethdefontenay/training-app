@@ -9,10 +9,10 @@ dependencies = [
     "sqlalchemy>=2.0",
     "alembic>=1.14",
     "asyncpg>=0.30",
-    "pydantic>=2.10",
+    "pydantic[email]>=2.10",
     "pydantic-settings>=2.6",
     "python-jose[cryptography]>=3.3",
-    "passlib[bcrypt]>=1.7",
+    "bcrypt>=4.1",
     "python-multipart>=0.0.12",
     "httpx>=0.28",
 ]
@@ -26,6 +26,7 @@ dev = [
     "aiosqlite>=0.20",
     "ruff>=0.8",
     "mypy>=1.13",
+    "types-python-jose>=3.3",
 ]
 
 [tool.ruff]
@@ -44,6 +45,7 @@ plugins = ["pydantic.mypy"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
 testpaths = ["tests"]
 addopts = "-q"
 
