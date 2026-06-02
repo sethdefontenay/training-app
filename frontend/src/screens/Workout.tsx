@@ -1,0 +1,99 @@
+import { useEffect, useState } from "react";
+import { get, post } from "../api";
+
+type Ex = { slug: string; name: string; sets_x_reps: string };
+type DailyView = { workout: { label: string; exercises: Ex[] } | null };
+
+const today = () => new Date().toISOString().slice(0, 10);
+
+export default function Workout() {
+  const day = today();
+  const [exercises, setExercises] = useState<Ex[]>([]);
+  const [lastWeek, setLastWeek] = useState<Record<string, string>>({});
+  const [sessionId, setSessionId] = useState<number | null>(null);
+
+  useEffect(() => {
+    get<DailyView>(`/daily/${day}`).then((v) => {
+      const ex = v.workout?.exercises ?? [];
+      setExercises(ex);
+      ex.forEach((e) =>
+        get<{ display: string }>(`/exercises/${e.slug}/last-week?before=${day}`).then((r) =>
+          setLastWeek((lw) => ({ ...lw, [e.slug]: r.display }))
+        )
+      );
+    });
+  }, []);
+
+  const ensureSession = async (): Promise<number> => {
+    if (sessionId) return sessionId;
+    const s = await post<{ id: number }>("/sessions", { date: day });
+    setSessionId(s.id);
+    return s.id;
+  };
+
+  const logSet = async (slug: string, reps: string, weight: string) => {
+    const sid = await ensureSession();
+    await post(`/sessions/${sid}/sets`, { exercise_slug: slug, reps, weight });
+  };
+
+  if (!exercises.length) return <p className="text-slate-400">No workout scheduled today.</p>;
+
+  return (
+    <div className="space-y-4">
+      <h1 className="text-2xl font-bold">Log workout</h1>
+      {exercises.map((e) => (
+        <Row key={e.slug} ex={e} last={lastWeek[e.slug] ?? "…"} onLog={logSet} />
+      ))}
+    </div>
+  );
+}
+
+function Row({
+  ex,
+  last,
+  onLog,
+}: {
+  ex: Ex;
+  last: string;
+  onLog: (slug: string, reps: string, weight: string) => Promise<void>;
+}) {
+  const [reps, setReps] = useState("");
+  const [weight, setWeight] = useState("");
+  const [done, setDone] = useState(0);
+  return (
+    <div className="rounded bg-slate-800 p-3">
+      <div className="flex justify-between">
+        <span className="font-semibold">{ex.name}</span>
+        <span className="text-sm text-slate-400">last wk: {last}</span>
+      </div>
+      <div className="text-sm text-slate-400">
+        {ex.sets_x_reps} · {done} logged
+      </div>
+      <div className="mt-2 flex gap-2">
+        <input
+          placeholder="reps"
+          value={reps}
+          onChange={(e) => setReps(e.target.value)}
+          className="w-20 rounded bg-slate-700 px-2 py-1"
+        />
+        <input
+          placeholder="kg (blank = BW)"
+          value={weight}
+          onChange={(e) => setWeight(e.target.value)}
+          className="w-28 rounded bg-slate-700 px-2 py-1"
+        />
+        <button
+          onClick={async () => {
+            await onLog(ex.slug, reps, weight);
+            setDone((d) => d + 1);
+            setReps("");
+            setWeight("");
+          }}
+          className="rounded bg-emerald-600 px-3 py-1 text-sm"
+        >
+          + Set
+        </button>
+      </div>
+    </div>
+  );
+}
