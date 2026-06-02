@@ -11,6 +11,9 @@ Common flows:
   invoke ci             # lint + tests + frontend build (what CI runs)
 """
 
+import subprocess
+import time
+
 from invoke import task
 
 BACKEND = "backend"
@@ -110,6 +113,39 @@ def frontend(c):
     """Run the Vite dev server (http://localhost:5173)."""
     with c.cd(FRONTEND):
         c.run("npm run dev", pty=True)
+
+
+@task
+def dev(c):
+    """Start everything in one: db + migrations, then backend + frontend together.
+
+    Streams both logs; Ctrl+C stops both.
+    """
+    db_up(c)
+    migrate(c)
+    print(
+        "\nStarting servers — Ctrl+C to stop both."
+        "\n  API      : http://localhost:8000  (/docs)"
+        "\n  Frontend : http://localhost:5173\n"
+    )
+    procs = [
+        subprocess.Popen(["uv", "run", "uvicorn", "app.main:app", "--reload"], cwd=BACKEND),
+        subprocess.Popen(["npm", "run", "dev"], cwd=FRONTEND),
+    ]
+    try:
+        while all(p.poll() is None for p in procs):
+            time.sleep(0.5)
+    except KeyboardInterrupt:
+        pass
+    finally:
+        for p in procs:
+            if p.poll() is None:
+                p.terminate()
+        for p in procs:
+            try:
+                p.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                p.kill()
 
 
 @task
