@@ -1,3 +1,7 @@
+# --- Uploaded files (check-in photos) ---
+uploads/
+backend/uploads/
+
 # --- Secrets / env ---
 .env
 .env.*

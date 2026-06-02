@@ -35,9 +35,7 @@ def _target_sets(sets_x_reps: str) -> int | None:
 
 
 async def _current_plan(session: AsyncSession) -> Plan | None:
-    plan: Plan | None = await session.scalar(
-        select(Plan).where(Plan.is_current.is_(True)).limit(1)
-    )
+    plan: Plan | None = await session.scalar(select(Plan).where(Plan.is_current.is_(True)).limit(1))
     return plan
 
 

@@ -12,6 +12,9 @@ class Settings(BaseSettings):
     app_name: str = "training-app"
     environment: str = "development"
 
+    # Where uploaded check-in photos are stored (object storage in prod; local dir for dev).
+    upload_dir: str = "uploads"
+
     # Database — async SQLAlchemy URL. Defaults to local docker-compose Postgres.
     database_url: str = "postgresql+asyncpg://training:training@localhost:5432/training"
 

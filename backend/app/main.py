@@ -2,7 +2,7 @@
 
 from fastapi import APIRouter, FastAPI
 
-from app.api import auth, daily, tracking, workouts
+from app.api import auth, checkin, daily, shopping, tracking, workouts
 from app.config import get_settings
 
 settings = get_settings()
@@ -34,5 +34,7 @@ api_v1.include_router(auth.router)
 api_v1.include_router(workouts.router)
 api_v1.include_router(tracking.router)
 api_v1.include_router(daily.router)
+api_v1.include_router(shopping.router)
+api_v1.include_router(checkin.router)
 
 app.include_router(api_v1)
