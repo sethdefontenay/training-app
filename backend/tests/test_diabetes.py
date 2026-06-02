@@ -21,9 +21,7 @@ class FakeTidepool:
         self._g = glucose
         self._i = insulin
 
-    async def fetch(
-        self, start: date, end: date
-    ) -> tuple[list[GlucosePoint], list[InsulinPoint]]:
+    async def fetch(self, start: date, end: date) -> tuple[list[GlucosePoint], list[InsulinPoint]]:
         return self._g, self._i
 
 

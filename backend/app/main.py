@@ -2,7 +2,17 @@
 
 from fastapi import APIRouter, FastAPI
 
-from app.api import auth, checkin, daily, diabetes, shopping, sync, tracking, workouts
+from app.api import (
+    auth,
+    checkin,
+    daily,
+    diabetes,
+    plans,
+    shopping,
+    sync,
+    tracking,
+    workouts,
+)
 from app.config import get_settings
 
 settings = get_settings()
@@ -38,5 +48,6 @@ api_v1.include_router(shopping.router)
 api_v1.include_router(checkin.router)
 api_v1.include_router(sync.router)
 api_v1.include_router(diabetes.router)
+api_v1.include_router(plans.router)
 
 app.include_router(api_v1)
