@@ -113,6 +113,20 @@ async def test_commit_generates_shopping_list(auth_client: AsyncClient) -> None:
     assert oats["quantity"] == 80 * 7
 
 
+async def test_current_plan_detail(auth_client: AsyncClient) -> None:
+    await auth_client.post(
+        "/api/v1/plans/commit",
+        json={"start_date": "2026-05-21", "plan": _sample().model_dump()},
+    )
+    d = (await auth_client.get("/api/v1/plans/current/detail")).json()
+    assert d["source"] == "PT, 2026-07-02"
+    assert isinstance(d["days_since_start"], int)
+    assert d["days_since_start"] >= 0
+    assert d["training_days"][0]["label"] == "Training Day 1"
+    assert d["training_days"][0]["exercises"][0]["slug"] == "leg-press-machine"
+    assert d["meals"][0]["carbs_g"] == 74
+
+
 async def test_ingest_unconfigured_503(auth_client: AsyncClient) -> None:
     app.dependency_overrides.pop(get_agent, None)
     resp = await auth_client.post("/api/v1/plans/ingest", json={"email_text": "x"})

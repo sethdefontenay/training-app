@@ -128,6 +128,14 @@ async def test_meal_check_records_adherence(
     assert eaten["carbs_g"] == 74  # carb figure unchanged by checking
 
 
+async def test_meal_can_be_unchecked(auth_client: AsyncClient, session: AsyncSession) -> None:
+    meal = await _seed_plan(session)
+    await auth_client.post(f"/api/v1/daily/{TRAIN.isoformat()}/meals/{meal.id}/check")
+    await auth_client.delete(f"/api/v1/daily/{TRAIN.isoformat()}/meals/{meal.id}/check")
+    view = (await auth_client.get(f"/api/v1/daily/{TRAIN.isoformat()}")).json()
+    assert next(m for m in view["meals"] if m["id"] == meal.id)["eaten"] is False
+
+
 async def test_wellbeing_upsert_and_edit(auth_client: AsyncClient) -> None:
     await auth_client.put(
         f"/api/v1/daily/{TRAIN.isoformat()}/wellbeing",

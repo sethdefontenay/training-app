@@ -1,44 +1,136 @@
 import { useEffect, useState } from "react";
-import { get } from "../api";
+import { ApiError, get } from "../api";
 
-type PlanRow = { id: number; start_date: string; is_current: boolean; source: string | null };
+type Ex = { slug: string; name: string; sets_x_reps: string; prescribed_weight: string | null };
+type Meal = {
+  meal_number: number;
+  slot: string;
+  name: string;
+  calories: number | null;
+  protein_g: number | null;
+  carbs_g: number | null;
+  fat_g: number | null;
+};
+type Detail = {
+  source: string | null;
+  phase: number | null;
+  start_date: string;
+  days_since_start: number;
+  targets: Record<string, number | null>;
+  schedule: Record<string, [string | null, boolean]>;
+  training_days: { label: string; exercises: Ex[] }[];
+  meals: Meal[];
+  mobility: string[];
+};
+
+const WEEKDAYS = [
+  "monday",
+  "tuesday",
+  "wednesday",
+  "thursday",
+  "friday",
+  "saturday",
+  "sunday",
+];
 
 export default function Plan() {
-  const [plans, setPlans] = useState<PlanRow[]>([]);
+  const [d, setD] = useState<Detail | null>(null);
+  const [none, setNone] = useState(false);
+
   useEffect(() => {
-    get<PlanRow[]>("/plans").then(setPlans);
+    get<Detail>("/plans/current/detail")
+      .then(setD)
+      .catch((e) => {
+        if (e instanceof ApiError && e.status === 404) setNone(true);
+      });
   }, []);
 
-  const current = plans.find((p) => p.is_current);
+  if (none) return <p className="text-slate-400">No active plan yet.</p>;
+  if (!d) return <p className="text-slate-400">Loading…</p>;
 
+  const t = d.targets;
   return (
-    <div className="space-y-4">
-      <h1 className="text-2xl font-bold">Current plan</h1>
-      {current ? (
-        <div className="rounded bg-slate-800 p-3">
-          <p className="font-semibold">{current.source ?? "Plan"}</p>
-          <p className="text-sm text-slate-400">from {current.start_date}</p>
-        </div>
-      ) : (
-        <p className="text-slate-400">No plan yet.</p>
-      )}
-      <p className="text-sm text-slate-500">
-        New plans arrive from your PT by email and are set up by the ingestion agent
-        (you review before it goes live).
-      </p>
-      {plans.length > 1 && (
-        <div>
-          <h2 className="mb-1 text-sm font-semibold text-slate-400">Past plans</h2>
-          <ul className="text-sm text-slate-400">
-            {plans
-              .filter((p) => !p.is_current)
-              .map((p) => (
-                <li key={p.id}>
-                  {p.source ?? "Plan"} — {p.start_date}
+    <div className="space-y-6">
+      <header>
+        <h1 className="text-2xl font-bold">{d.source ?? "Current plan"}</h1>
+        <p className="text-sm text-slate-400">
+          Started {d.start_date} · day {d.days_since_start}
+          {d.phase != null && ` · phase ${d.phase}`}
+        </p>
+      </header>
+
+      <section className="rounded bg-slate-800 p-3 text-sm">
+        <h2 className="mb-1 font-semibold">Daily targets</h2>
+        <p className="text-slate-300">
+          {t.steps_target ?? "—"} steps · {t.water_min_l ?? "—"}–{t.water_max_l ?? "—"} L water ·{" "}
+          {t.electrolytes_per_day ?? "—"} electrolytes
+        </p>
+        <p className="text-slate-300">
+          {t.daily_calories ?? "—"} kcal · {t.daily_protein_g ?? "—"}P ·{" "}
+          {t.daily_carbs_g ?? "—"}C · {t.daily_fat_g ?? "—"}F
+        </p>
+      </section>
+
+      <section>
+        <h2 className="mb-2 font-semibold">Weekly schedule</h2>
+        <ul className="text-sm">
+          {WEEKDAYS.map((wd) => {
+            const [label, mob] = d.schedule[wd] ?? [null, false];
+            return (
+              <li key={wd} className="flex justify-between border-b border-slate-800 py-1">
+                <span className="capitalize">{wd}</span>
+                <span className="text-slate-400">
+                  {label ?? "rest"}
+                  {mob ? " · mobility" : ""}
+                </span>
+              </li>
+            );
+          })}
+        </ul>
+      </section>
+
+      <section>
+        <h2 className="mb-2 font-semibold">Training days</h2>
+        {d.training_days.map((td) => (
+          <div key={td.label} className="mb-3 rounded bg-slate-800 p-3">
+            <div className="mb-1 font-semibold">{td.label}</div>
+            <ul className="text-sm">
+              {td.exercises.map((e) => (
+                <li key={e.slug} className="flex justify-between">
+                  <span>{e.name}</span>
+                  <span className="text-slate-400">
+                    {e.sets_x_reps}
+                    {e.prescribed_weight ? ` · ${e.prescribed_weight} kg` : ""}
+                  </span>
                 </li>
               ))}
-          </ul>
-        </div>
+            </ul>
+          </div>
+        ))}
+      </section>
+
+      <section>
+        <h2 className="mb-2 font-semibold">Meals</h2>
+        <ul className="space-y-1 text-sm">
+          {d.meals.map((m) => (
+            <li key={m.meal_number} className="rounded bg-slate-800 px-3 py-2">
+              <div className="flex justify-between">
+                <span>{m.name}</span>
+                <span className="text-amber-300">{m.carbs_g ?? "—"} g carbs</span>
+              </div>
+              <div className="text-slate-400">
+                {m.calories ?? "—"} kcal · {m.protein_g ?? "—"}P · {m.fat_g ?? "—"}F
+              </div>
+            </li>
+          ))}
+        </ul>
+      </section>
+
+      {d.mobility.length > 0 && (
+        <section>
+          <h2 className="mb-2 font-semibold">Mobility</h2>
+          <p className="text-sm text-slate-400">{d.mobility.join(" · ")}</p>
+        </section>
       )}
     </div>
   );

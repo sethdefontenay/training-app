@@ -84,6 +84,21 @@ async def mark_mobility_done(
     return {"done": True}
 
 
+@router.delete("/mobility/done", status_code=status.HTTP_200_OK)
+async def unmark_mobility_done(
+    on: date, exercise_slug: str, session: SessionDep, user: CurrentUser
+) -> dict[str, bool]:
+    ex = await session.scalar(select(Exercise).where(Exercise.slug == exercise_slug))
+    if ex is not None:
+        existing = await session.scalar(
+            select(MobilityDone).where(MobilityDone.date == on, MobilityDone.exercise_id == ex.id)
+        )
+        if existing is not None:
+            await session.delete(existing)
+            await session.commit()
+    return {"done": False}
+
+
 @router.get("/mobility/done", response_model=list[str])
 async def list_mobility_done(on: date, session: SessionDep, user: CurrentUser) -> list[str]:
     rows = (

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { get, post, put } from "../api";
+import { del, get, post, put } from "../api";
 
 type Meal = { id: number; name: string; slot: string; carbs_g: number | null; eaten: boolean };
 type Exercise = {
@@ -36,16 +36,18 @@ export default function Today() {
 
   if (!view) return <p className="text-slate-400">Loading…</p>;
 
-  const checkMeal = async (id: number) => {
-    await post(`/daily/${day}/meals/${id}/check`);
+  const toggleMeal = async (id: number, eaten: boolean) => {
+    await (eaten ? del(`/daily/${day}/meals/${id}/check`) : post(`/daily/${day}/meals/${id}/check`));
     load();
   };
   const setMetric = async (k: string, v: number) => {
     await put(`/daily/${day}/wellbeing`, { [k]: v });
     load();
   };
-  const markMobility = async (slug: string) => {
-    await post(`/mobility/done`, { date: day, exercise_slug: slug });
+  const toggleMobility = async (slug: string, done: boolean) => {
+    await (done
+      ? del(`/mobility/done?on=${day}&exercise_slug=${slug}`)
+      : post(`/mobility/done`, { date: day, exercise_slug: slug }));
     load();
   };
 
@@ -86,8 +88,7 @@ export default function Today() {
                   <input
                     type="checkbox"
                     checked={m.done}
-                    disabled={m.done}
-                    onChange={() => markMobility(m.slug)}
+                    onChange={() => toggleMobility(m.slug, m.done)}
                   />
                   {m.name}
                 </label>
@@ -108,7 +109,11 @@ export default function Today() {
           {view.meals.map((m) => (
             <li key={m.id} className="flex items-center justify-between rounded bg-slate-800 px-3 py-2">
               <label className="flex items-center gap-2">
-                <input type="checkbox" checked={m.eaten} onChange={() => checkMeal(m.id)} />
+                <input
+                  type="checkbox"
+                  checked={m.eaten}
+                  onChange={() => toggleMeal(m.id, m.eaten)}
+                />
                 {m.name}
               </label>
               <span className="text-sm text-amber-300">{m.carbs_g ?? "—"} g carbs</span>

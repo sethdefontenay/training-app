@@ -75,6 +75,17 @@ async def test_mark_and_list_mobility_done(auth_client: AsyncClient) -> None:
     assert done == ["bird-dog"]
 
 
+async def test_mobility_can_be_unmarked(auth_client: AsyncClient) -> None:
+    await auth_client.post(
+        "/api/v1/mobility/done", json={"date": "2026-05-22", "exercise_slug": "bird-dog"}
+    )
+    await auth_client.delete(
+        "/api/v1/mobility/done", params={"on": "2026-05-22", "exercise_slug": "bird-dog"}
+    )
+    done = (await auth_client.get("/api/v1/mobility/done", params={"on": "2026-05-22"})).json()
+    assert done == []
+
+
 # --- progression ---
 
 

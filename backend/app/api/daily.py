@@ -71,3 +71,16 @@ async def check_meal(
         existing.eaten = True
     await session.commit()
     return {"eaten": True}
+
+
+@router.delete("/{day}/meals/{meal_id}/check", status_code=status.HTTP_200_OK)
+async def uncheck_meal(
+    day: date, meal_id: int, session: SessionDep, user: CurrentUser
+) -> dict[str, bool]:
+    existing = await session.scalar(
+        select(MealCheck).where(MealCheck.date == day, MealCheck.meal_id == meal_id)
+    )
+    if existing is not None:
+        await session.delete(existing)
+        await session.commit()
+    return {"eaten": False}
