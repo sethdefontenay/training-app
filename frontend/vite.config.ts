@@ -10,6 +10,13 @@ export default defineConfig({
     tailwindcss(),
     VitePWA({
       registerType: "autoUpdate",
+      workbox: {
+        // Don't let the SW's SPA navigation fallback swallow real server
+        // navigations (OAuth redirects to /api/..., the health probe). Without
+        // this, clicking "Connect with Google" is served index.html instead of
+        // hitting the 307 to Google, bouncing you back into the app root.
+        navigateFallbackDenylist: [/^\/api\//, /^\/health$/, /^\/docs$/],
+      },
       manifest: {
         name: "Training App",
         short_name: "Training",
