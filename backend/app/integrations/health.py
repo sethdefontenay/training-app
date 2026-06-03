@@ -5,14 +5,71 @@ real Google Health client once credentials are wired. The sync itself is idempot
 never silently overwrites a manual entry.
 """
 
-from dataclasses import dataclass, field
-from datetime import date
-from typing import Protocol
+from __future__ import annotations
 
+from dataclasses import dataclass, field
+from datetime import UTC, date, datetime, time, timedelta
+from typing import Any, Protocol
+from zoneinfo import ZoneInfo
+
+import httpx
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import SleepNight, StepsDay
+
+# Google Health API (v4) — same endpoints the standalone google-health-fetch uses.
+_TOKEN_URL = "https://oauth2.googleapis.com/token"
+_STEPS_URL = "https://health.googleapis.com/v4/users/me/dataTypes/steps/dataPoints:rollUp"
+_SLEEP_URL = "https://health.googleapis.com/v4/users/me/dataTypes/sleep/dataPoints"
+_DEFAULT_TZ = "Pacific/Auckland"
+
+
+def _sum_steps(body: dict[str, Any]) -> int:
+    total = 0
+    for point in body.get("rollupDataPoints", []):
+        steps = point.get("steps", {})
+        total += int(steps.get("countSum") or steps.get("count") or 0)
+    return total
+
+
+def _parse_iso(value: str) -> datetime:
+    return datetime.fromisoformat(value.replace("Z", "+00:00"))
+
+
+def _parse_sleep(body: dict[str, Any]) -> SleepRecord | None:
+    """Pick the longest sleep session and summarise it (mirrors fetch_sleep.py)."""
+    points = body.get("dataPoints", [])
+    if not points:
+        return None
+
+    def duration(p: dict[str, Any]) -> timedelta:
+        i = p["sleep"]["interval"]
+        return _parse_iso(i["endTime"]) - _parse_iso(i["startTime"])
+
+    main = max(points, key=duration)
+    interval = main["sleep"]["interval"]
+    start_utc, end_utc = _parse_iso(interval["startTime"]), _parse_iso(interval["endTime"])
+    start_off = int(str(interval["startUtcOffset"]).rstrip("s"))
+    end_off = int(str(interval["endUtcOffset"]).rstrip("s"))
+    start_local = start_utc + timedelta(seconds=start_off)
+    end_local = end_utc + timedelta(seconds=end_off)
+
+    totals = {"AWAKE": 0.0, "LIGHT": 0.0, "DEEP": 0.0, "REM": 0.0, "OUT_OF_BED": 0.0}
+    for stage in main["sleep"].get("stages", []):
+        mins = (_parse_iso(stage["endTime"]) - _parse_iso(stage["startTime"])).total_seconds() / 60
+        totals[stage.get("type", "")] = totals.get(stage.get("type", ""), 0.0) + mins
+
+    in_bed = (end_utc - start_utc).total_seconds() / 60
+    asleep = totals["LIGHT"] + totals["DEEP"] + totals["REM"]
+    efficiency = round(asleep / in_bed * 100, 1) if in_bed > 0 else 0.0
+    return SleepRecord(
+        date=end_local.date(),
+        asleep_min=round(asleep, 1),
+        efficiency=efficiency,
+        bedtime=start_local.strftime("%H:%M"),
+        wake_time=end_local.strftime("%H:%M"),
+    )
 
 
 class IntegrationNotConfigured(RuntimeError):
@@ -40,17 +97,74 @@ class HealthProvider(Protocol):
 
 
 class GoogleHealthProvider:
-    """Real provider. Configured from UI settings (refresh token); live client TBD."""
+    """Live Google Health client. OAuth offline access: refresh token -> access token,
+    then v4 steps rollup + sleep dataPoints (ported from google-health-fetch)."""
 
-    def __init__(self, api_key: str | None = None) -> None:
-        self._api_key = api_key
+    def __init__(
+        self,
+        client_id: str | None = None,
+        client_secret: str | None = None,
+        refresh_token: str | None = None,
+        tz: str = _DEFAULT_TZ,
+    ) -> None:
+        self._client_id = client_id
+        self._client_secret = client_secret
+        self._refresh_token = refresh_token
+        self._tz = ZoneInfo(tz)
+
+    async def _access_token(self, client: httpx.AsyncClient) -> str:
+        resp = await client.post(
+            _TOKEN_URL,
+            data={
+                "grant_type": "refresh_token",
+                "client_id": self._client_id,
+                "client_secret": self._client_secret,
+                "refresh_token": self._refresh_token,
+            },
+        )
+        resp.raise_for_status()
+        return str(resp.json()["access_token"])
 
     async def fetch(self, start: date, end: date) -> tuple[list[StepRecord], list[SleepRecord]]:
-        # Until connected via Settings we fail loudly rather than inventing data.
-        if not self._api_key:
+        if not (self._client_id and self._client_secret and self._refresh_token):
             raise IntegrationNotConfigured("Google Health not connected — set it up in Settings")
-        # Real implementation authenticates with Google and pulls steps + sleep.
-        raise NotImplementedError  # pragma: no cover
+
+        steps_out: list[StepRecord] = []
+        sleep_out: list[SleepRecord] = []
+        async with httpx.AsyncClient(timeout=30) as client:
+            token = await self._access_token(client)
+            headers = {"Authorization": f"Bearer {token}"}
+            day = start
+            while day <= end:
+                start_local = datetime.combine(day, time.min, tzinfo=self._tz)
+                end_local = start_local + timedelta(days=1)
+                steps_resp = await client.post(
+                    _STEPS_URL,
+                    headers=headers,
+                    json={
+                        "range": {
+                            "startTime": start_local.astimezone(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
+                            "endTime": end_local.astimezone(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
+                        },
+                        "windowSize": "86400s",
+                    },
+                )
+                if steps_resp.status_code == 200:
+                    steps_out.append(StepRecord(date=day, steps=_sum_steps(steps_resp.json())))
+
+                civ_start = datetime.combine(day, time.min, tzinfo=self._tz)
+                civ_end = datetime.combine(day + timedelta(days=1), time.min, tzinfo=self._tz)
+                filt = (
+                    f'sleep.interval.civil_end_time >= "{civ_start.strftime("%Y-%m-%dT%H:%M:%S")}" '
+                    f'AND sleep.interval.civil_end_time < "{civ_end.strftime("%Y-%m-%dT%H:%M:%S")}"'
+                )
+                sleep_resp = await client.get(_SLEEP_URL, headers=headers, params={"filter": filt})
+                if sleep_resp.status_code == 200:
+                    record = _parse_sleep(sleep_resp.json())
+                    if record is not None:
+                        sleep_out.append(record)
+                day += timedelta(days=1)
+        return steps_out, sleep_out
 
 
 @dataclass

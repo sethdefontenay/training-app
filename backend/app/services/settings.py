@@ -5,7 +5,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import IntegrationSetting
 
-GOOGLE_HEALTH_FIELDS = (("api_key", "Google Health API key"),)
+GOOGLE_HEALTH_FIELDS = (
+    ("client_id", "OAuth client ID"),
+    ("client_secret", "OAuth client secret"),
+    ("refresh_token", "Refresh token (offline access)"),
+)
 
 
 async def get_setting(session: AsyncSession, key: str) -> str | None:
@@ -26,4 +30,5 @@ async def google_health_config(session: AsyncSession) -> dict[str, str | None]:
 
 
 async def google_health_connected(session: AsyncSession) -> bool:
-    return bool(await get_setting(session, "google_health.api_key"))
+    cfg = await google_health_config(session)
+    return all(cfg.values())

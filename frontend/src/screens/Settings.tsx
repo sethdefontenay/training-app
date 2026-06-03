@@ -77,7 +77,8 @@ export default function Settings() {
         </form>
         {msg && <p className="text-sm text-amber-300">{msg}</p>}
         <p className="text-xs text-slate-500">
-          Paste your Google Health API key. Saving it marks the connection ready.
+          Paste your Google OAuth client ID, client secret, and a refresh token (offline
+          access). Once saved, the server refreshes access tokens automatically — set-it-up-once.
         </p>
       </section>
     </div>

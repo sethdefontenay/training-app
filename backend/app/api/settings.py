@@ -14,14 +14,16 @@ router = APIRouter(prefix="/settings", tags=["settings"])
 
 
 class GoogleHealthIn(BaseModel):
-    api_key: str | None = None
+    client_id: str | None = None
+    client_secret: str | None = None
+    refresh_token: str | None = None
 
 
 async def _gh_status(session: SessionDep) -> dict[str, object]:
     cfg = await google_health_config(session)
     # Never echo secret values back — only whether each field is set.
     return {
-        "connected": bool(cfg["api_key"]),
+        "connected": all(cfg.values()),
         "fields": [
             {"key": k, "label": label, "set": bool(cfg[k])} for k, label in GOOGLE_HEALTH_FIELDS
         ],

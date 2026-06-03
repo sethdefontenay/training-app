@@ -19,7 +19,11 @@ router = APIRouter(prefix="/sync", tags=["sync"])
 
 async def get_health_provider(session: SessionDep) -> HealthProvider:
     cfg = await google_health_config(session)
-    return GoogleHealthProvider(api_key=cfg["api_key"])
+    return GoogleHealthProvider(
+        client_id=cfg["client_id"],
+        client_secret=cfg["client_secret"],
+        refresh_token=cfg["refresh_token"],
+    )
 
 
 ProviderDep = Annotated[HealthProvider, Depends(get_health_provider)]
