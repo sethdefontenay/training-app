@@ -93,7 +93,9 @@ def seed(c, email, password):
 
 @task(help={"path": f"vault path (default {DEFAULT_VAULT})"})
 def import_vault(c, path=DEFAULT_VAULT):
-    """Import the full Obsidian history into the DB (idempotent, re-runnable)."""
+    """Full migration: import the Obsidian plan (training days, exercises, schedule,
+    meals + macros, targets) AND logged history (sessions, sets, measurements, steps,
+    sleep, mobility), and generate the shopping list. Idempotent / re-runnable."""
     with c.cd(BACKEND):
         c.run(f'uv run python -m app.import_vault "{path}"', pty=True)
 
