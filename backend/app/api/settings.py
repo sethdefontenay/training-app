@@ -1,16 +1,35 @@
 """Settings endpoints: manage integration connections from the UI."""
 
+import secrets
+from urllib.parse import urlencode
+
+import httpx
 from fastapi import APIRouter
+from fastapi.responses import RedirectResponse
 from pydantic import BaseModel
 
 from app.api.deps import CurrentUser, SessionDep
+from app.config import get_settings
 from app.services.settings import (
     GOOGLE_HEALTH_FIELDS,
+    get_setting,
     google_health_config,
     set_setting,
 )
 
 router = APIRouter(prefix="/settings", tags=["settings"])
+
+_settings = get_settings()
+_GOOGLE_AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth"
+_GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token"
+_SCOPES = (
+    "https://www.googleapis.com/auth/googlehealth.activity_and_fitness.readonly "
+    "https://www.googleapis.com/auth/googlehealth.sleep.readonly"
+)
+
+
+def _back(outcome: str) -> RedirectResponse:
+    return RedirectResponse(f"{_settings.frontend_url}/settings?gh={outcome}")
 
 
 class GoogleHealthIn(BaseModel):
@@ -45,3 +64,59 @@ async def google_health_save(
             await set_setting(session, f"google_health.{key}", value)
     await session.commit()
     return await _gh_status(session)
+
+
+# --- OAuth connect flow (browser navigations — not bearer-authenticated) ---
+
+
+@router.get("/google-health/authorize")
+async def google_health_authorize(session: SessionDep) -> RedirectResponse:
+    cfg = await google_health_config(session)
+    if not cfg["client_id"]:
+        return _back("missing_client")
+    state = secrets.token_urlsafe(16)
+    await set_setting(session, "google_health.oauth_state", state)
+    await session.commit()
+    params = {
+        "client_id": cfg["client_id"],
+        "redirect_uri": _settings.google_redirect_uri,
+        "response_type": "code",
+        "scope": _SCOPES,
+        "access_type": "offline",
+        "prompt": "consent",
+        "state": state,
+    }
+    return RedirectResponse(f"{_GOOGLE_AUTH_URL}?{urlencode(params)}")
+
+
+@router.get("/google-health/callback")
+async def google_health_callback(
+    session: SessionDep,
+    code: str | None = None,
+    state: str | None = None,
+    error: str | None = None,
+) -> RedirectResponse:
+    if error or not code:
+        return _back("denied")
+    if not state or state != await get_setting(session, "google_health.oauth_state"):
+        return _back("bad_state")
+    cfg = await google_health_config(session)
+    async with httpx.AsyncClient(timeout=30) as client:
+        resp = await client.post(
+            _GOOGLE_TOKEN_URL,
+            data={
+                "grant_type": "authorization_code",
+                "code": code,
+                "client_id": cfg["client_id"],
+                "client_secret": cfg["client_secret"],
+                "redirect_uri": _settings.google_redirect_uri,
+            },
+        )
+    if resp.status_code != 200:
+        return _back("exchange_failed")
+    refresh = resp.json().get("refresh_token")
+    if refresh:
+        await set_setting(session, "google_health.refresh_token", refresh)
+    await set_setting(session, "google_health.oauth_state", None)
+    await session.commit()
+    return _back("connected" if refresh else "no_refresh_token")

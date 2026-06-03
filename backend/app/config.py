@@ -23,6 +23,11 @@ class Settings(BaseSettings):
     jwt_algorithm: str = "HS256"
     access_token_expires_minutes: int = 60 * 24 * 14  # 14 days — long-lived on trusted phone
 
+    # OAuth (Google Health connect flow). Override in prod via env.
+    # The redirect URI must be registered in the Google Cloud OAuth client.
+    google_redirect_uri: str = "http://localhost:8000/api/v1/settings/google-health/callback"
+    frontend_url: str = "http://localhost:5173"
+
 
 @lru_cache
 def get_settings() -> Settings:

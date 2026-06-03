@@ -12,7 +12,24 @@ export default function Settings() {
   const load = () => get<Status>("/settings/google-health").then(setStatus);
   useEffect(() => {
     load();
+    const outcome = new URLSearchParams(window.location.search).get("gh");
+    const messages: Record<string, string> = {
+      connected: "Connected to Google Health ✓",
+      denied: "Google sign-in was cancelled.",
+      bad_state: "Connect failed (state mismatch) — try again.",
+      exchange_failed: "Google rejected the token exchange — check client ID/secret.",
+      missing_client: "Save your client ID & secret first, then Connect.",
+      no_refresh_token: "Connected, but no refresh token returned — revoke app access in your Google account and Connect again.",
+    };
+    if (outcome && messages[outcome]) {
+      setMsg(messages[outcome]);
+      window.history.replaceState({}, "", "/settings");
+    }
   }, []);
+
+  const connect = () => {
+    window.location.href = "/api/v1/settings/google-health/authorize";
+  };
 
   const save = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -30,8 +47,8 @@ export default function Settings() {
     } catch {
       setMsg(
         status?.connected
-          ? "Connection saved, but the live Google client isn't built yet."
-          : "Not connected — save your OAuth credentials first.",
+          ? "Sync failed — check the server logs (token may need re-consent)."
+          : "Not connected — save your client ID/secret, then Connect with Google.",
       );
     }
   };
@@ -64,8 +81,15 @@ export default function Settings() {
               />
             </label>
           ))}
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             <button className="rounded bg-emerald-600 px-3 py-1 text-sm font-semibold">Save</button>
+            <button
+              type="button"
+              onClick={connect}
+              className="rounded bg-blue-600 px-3 py-1 text-sm font-semibold"
+            >
+              Connect with Google
+            </button>
             <button
               type="button"
               onClick={sync}
@@ -77,8 +101,9 @@ export default function Settings() {
         </form>
         {msg && <p className="text-sm text-amber-300">{msg}</p>}
         <p className="text-xs text-slate-500">
-          Paste your Google OAuth client ID, client secret, and a refresh token (offline
-          access). Once saved, the server refreshes access tokens automatically — set-it-up-once.
+          Save your Google OAuth client ID &amp; secret, then <b>Connect with Google</b> to grant
+          offline access once — the server captures a refresh token and renews automatically.
+          (You can also paste a refresh token directly if you already have one.)
         </p>
       </section>
     </div>
