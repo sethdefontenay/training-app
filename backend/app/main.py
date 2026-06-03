@@ -13,6 +13,9 @@ from app.api import (
     tracking,
     workouts,
 )
+from app.api import (
+    settings as settings_api,
+)
 from app.config import get_settings
 
 settings = get_settings()
@@ -49,5 +52,6 @@ api_v1.include_router(checkin.router)
 api_v1.include_router(sync.router)
 api_v1.include_router(diabetes.router)
 api_v1.include_router(plans.router)
+api_v1.include_router(settings_api.router)
 
 app.include_router(api_v1)

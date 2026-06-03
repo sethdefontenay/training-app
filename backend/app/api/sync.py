@@ -12,12 +12,14 @@ from app.integrations.health import (
     IntegrationNotConfigured,
     sync_steps_sleep,
 )
+from app.services.settings import google_health_config
 
 router = APIRouter(prefix="/sync", tags=["sync"])
 
 
-def get_health_provider() -> HealthProvider:
-    return GoogleHealthProvider()
+async def get_health_provider(session: SessionDep) -> HealthProvider:
+    cfg = await google_health_config(session)
+    return GoogleHealthProvider(api_key=cfg["api_key"])
 
 
 ProviderDep = Annotated[HealthProvider, Depends(get_health_provider)]

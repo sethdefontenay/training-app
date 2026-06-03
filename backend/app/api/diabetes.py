@@ -27,9 +27,13 @@ ProviderDep = Annotated[TidepoolProvider, Depends(get_tidepool_provider)]
 
 @router.post("/sync")
 async def sync(
-    session: SessionDep, user: CurrentUser, provider: ProviderDep, days: int = 7
+    session: SessionDep,
+    user: CurrentUser,
+    provider: ProviderDep,
+    days: int = 7,
+    before: date | None = None,
 ) -> dict[str, object]:
-    end = date.today()
+    end = before or date.today()
     start = end - timedelta(days=days - 1)
     try:
         result = await sync_diabetes(session, provider, start, end)
@@ -48,8 +52,10 @@ async def sync(
 
 
 @router.get("/record")
-async def record(session: SessionDep, user: CurrentUser, days: int = 7) -> dict[str, object]:
-    end = date.today()
+async def record(
+    session: SessionDep, user: CurrentUser, days: int = 7, before: date | None = None
+) -> dict[str, object]:
+    end = before or date.today()
     start = end - timedelta(days=days - 1)
     insulin = await insulin_count(session, start, end)
     return {

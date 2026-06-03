@@ -1,4 +1,7 @@
-"""diabetes_data.feature: Tidepool pull, glucose summary, missing pump, idempotency."""
+"""diabetes_data.feature: Tidepool pull, glucose summary, missing pump, idempotency.
+
+Uses a FIXED reference date via ?before= so the window is deterministic (CI-safe).
+"""
 
 from datetime import date, datetime, time
 
@@ -9,11 +12,12 @@ from app.api.diabetes import get_tidepool_provider
 from app.integrations.tidepool import GlucosePoint, InsulinPoint
 from app.main import app
 
-TODAY = date.today()
+REF = date(2026, 5, 25)
+PARAMS = {"days": 1, "before": REF.isoformat()}
 
 
 def _at(hour: int) -> datetime:
-    return datetime.combine(TODAY, time(hour, 0))
+    return datetime.combine(REF, time(hour, 0))
 
 
 class FakeTidepool:
@@ -30,11 +34,8 @@ def _use(glucose: list[GlucosePoint], insulin: list[InsulinPoint]) -> None:
 
 
 async def test_sync_stores_glucose_and_insulin(auth_client: AsyncClient) -> None:
-    _use(
-        [GlucosePoint(_at(8), 6.5)],
-        [InsulinPoint(_at(8), "bolus", 4.0, carbs_g=74)],
-    )
-    body = (await auth_client.post("/api/v1/diabetes/sync", params={"days": 1})).json()
+    _use([GlucosePoint(_at(8), 6.5)], [InsulinPoint(_at(8), "bolus", 4.0, carbs_g=74)])
+    body = (await auth_client.post("/api/v1/diabetes/sync", params=PARAMS)).json()
     assert body["glucose_synced"] == 1
     assert body["insulin_synced"] == 1
     assert body["pump_uploaded"] is True
@@ -42,8 +43,8 @@ async def test_sync_stores_glucose_and_insulin(auth_client: AsyncClient) -> None
 
 async def test_glucose_summary_avg_and_tir(auth_client: AsyncClient) -> None:
     _use([GlucosePoint(_at(8), 5.0), GlucosePoint(_at(9), 12.0)], [])
-    await auth_client.post("/api/v1/diabetes/sync", params={"days": 1})
-    rec = (await auth_client.get("/api/v1/diabetes/record", params={"days": 1})).json()
+    await auth_client.post("/api/v1/diabetes/sync", params=PARAMS)
+    rec = (await auth_client.get("/api/v1/diabetes/record", params=PARAMS)).json()
     assert rec["glucose"]["count"] == 2
     assert rec["glucose"]["average"] == 8.5
     assert rec["glucose"]["time_in_range_pct"] == 50.0
@@ -51,16 +52,16 @@ async def test_glucose_summary_avg_and_tir(auth_client: AsyncClient) -> None:
 
 async def test_missing_pump_upload_shown_honestly(auth_client: AsyncClient) -> None:
     _use([GlucosePoint(_at(8), 6.0)], [])  # glucose only, no pump upload
-    await auth_client.post("/api/v1/diabetes/sync", params={"days": 1})
-    rec = (await auth_client.get("/api/v1/diabetes/record", params={"days": 1})).json()
+    await auth_client.post("/api/v1/diabetes/sync", params=PARAMS)
+    rec = (await auth_client.get("/api/v1/diabetes/record", params=PARAMS)).json()
     assert rec["pump_uploaded"] is False
     assert rec["insulin_events"] == 0
 
 
 async def test_resync_idempotent(auth_client: AsyncClient, session: AsyncSession) -> None:
     _use([GlucosePoint(_at(8), 6.0)], [])
-    await auth_client.post("/api/v1/diabetes/sync", params={"days": 1})
-    await auth_client.post("/api/v1/diabetes/sync", params={"days": 1})
+    await auth_client.post("/api/v1/diabetes/sync", params=PARAMS)
+    await auth_client.post("/api/v1/diabetes/sync", params=PARAMS)
     from sqlalchemy import func, select
 
     from app.models import GlucoseReading
@@ -71,5 +72,5 @@ async def test_resync_idempotent(auth_client: AsyncClient, session: AsyncSession
 
 async def test_unconfigured_surfaces_503(auth_client: AsyncClient) -> None:
     app.dependency_overrides.pop(get_tidepool_provider, None)
-    resp = await auth_client.post("/api/v1/diabetes/sync", params={"days": 1})
+    resp = await auth_client.post("/api/v1/diabetes/sync", params=PARAMS)
     assert resp.status_code == 503

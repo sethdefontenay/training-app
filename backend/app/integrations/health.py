@@ -12,7 +12,6 @@ from typing import Protocol
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.config import get_settings
 from app.models import SleepNight, StepsDay
 
 
@@ -41,14 +40,16 @@ class HealthProvider(Protocol):
 
 
 class GoogleHealthProvider:
-    """Real provider. Code-complete shell — raises until Google creds are wired."""
+    """Real provider. Configured from UI settings (refresh token); live client TBD."""
+
+    def __init__(self, api_key: str | None = None) -> None:
+        self._api_key = api_key
 
     async def fetch(self, start: date, end: date) -> tuple[list[StepRecord], list[SleepRecord]]:
-        settings = get_settings()
-        # The real implementation authenticates with Google and pulls steps + sleep.
-        # Until credentials exist we fail loudly rather than inventing data.
-        if not getattr(settings, "google_health_token", None):
-            raise IntegrationNotConfigured("Google Health credentials not configured")
+        # Until connected via Settings we fail loudly rather than inventing data.
+        if not self._api_key:
+            raise IntegrationNotConfigured("Google Health not connected — set it up in Settings")
+        # Real implementation authenticates with Google and pulls steps + sleep.
         raise NotImplementedError  # pragma: no cover
 
 

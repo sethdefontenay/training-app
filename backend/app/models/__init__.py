@@ -3,6 +3,7 @@
 from app.models.base import Base
 from app.models.checkin import CheckIn, CheckInPhoto
 from app.models.health import GlucoseReading, InsulinEvent, SleepNight, StepsDay
+from app.models.integration import IntegrationSetting
 from app.models.plan import (
     Exercise,
     Meal,
@@ -26,6 +27,7 @@ __all__ = [
     "Exercise",
     "GlucoseReading",
     "InsulinEvent",
+    "IntegrationSetting",
     "Meal",
     "MealCheck",
     "MealIngredient",

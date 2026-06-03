@@ -7,6 +7,7 @@ const AREAS = [
   { to: "/measurements", label: "Measurements", hint: "" },
   { to: "/diabetes", label: "Diabetes record", hint: "glucose & insulin" },
   { to: "/plan", label: "Current plan", hint: "" },
+  { to: "/settings", label: "Settings", hint: "connect Google Health" },
 ];
 
 export default function Home() {

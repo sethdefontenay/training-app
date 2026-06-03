@@ -7,6 +7,7 @@ import Home from "./screens/Home";
 import Login from "./screens/Login";
 import Measurements from "./screens/Measurements";
 import Plan from "./screens/Plan";
+import Settings from "./screens/Settings";
 import Shopping from "./screens/Shopping";
 import Today from "./screens/Today";
 import Workout from "./screens/Workout";
@@ -25,6 +26,7 @@ export default function App() {
         <Route path="/shopping" element={<Shopping />} />
         <Route path="/diabetes" element={<Diabetes />} />
         <Route path="/plan" element={<Plan />} />
+        <Route path="/settings" element={<Settings />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>
     </Routes>
