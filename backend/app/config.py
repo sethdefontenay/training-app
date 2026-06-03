@@ -2,6 +2,7 @@
 
 from functools import lru_cache
 
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -27,6 +28,17 @@ class Settings(BaseSettings):
     # The redirect URI must be registered in the Google Cloud OAuth client.
     google_redirect_uri: str = "http://localhost:8000/api/v1/settings/google-health/callback"
     frontend_url: str = "http://localhost:5173"
+
+    @field_validator("database_url")
+    @classmethod
+    def _ensure_asyncpg(cls, v: str) -> str:
+        # Railway/Heroku give postgres://|postgresql:// — our async stack needs asyncpg.
+        if v.startswith("postgresql+"):
+            return v
+        for prefix in ("postgresql://", "postgres://"):
+            if v.startswith(prefix):
+                return "postgresql+asyncpg://" + v[len(prefix) :]
+        return v
 
 
 @lru_cache
