@@ -1,10 +1,10 @@
 import { useEffect, useState } from "react";
-import { get, post } from "../api";
+import { get, post, todayLocal } from "../api";
 
 type Ex = { slug: string; name: string; sets_x_reps: string };
 type DailyView = { workout: { label: string; exercises: Ex[] } | null };
 
-const today = () => new Date().toISOString().slice(0, 10);
+const today = todayLocal;
 
 export default function Workout() {
   const day = today();

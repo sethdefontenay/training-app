@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { get, post } from "../api";
+import { get, post, todayLocal } from "../api";
 
 const FIELDS: [string, string][] = [
   ["waist_cm", "Waist"],
@@ -15,7 +15,7 @@ type Detail = Row & { changes: Record<string, number> };
 
 export default function Measurements() {
   const [rows, setRows] = useState<Row[]>([]);
-  const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
+  const [date, setDate] = useState(todayLocal());
   const [vals, setVals] = useState<Record<string, string>>({});
   const [detail, setDetail] = useState<Detail | null>(null);
 

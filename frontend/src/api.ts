@@ -29,6 +29,15 @@ export async function api<T = unknown>(path: string, opts: RequestInit = {}): Pr
   return (await res.json()) as T;
 }
 
+/** Today's date as YYYY-MM-DD in the *local* timezone.
+ * (Date.toISOString() is UTC, which rolls a day early/late for non-UTC users.) */
+export const todayLocal = (): string => {
+  const d = new Date();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${d.getFullYear()}-${m}-${day}`;
+};
+
 export const get = <T>(p: string) => api<T>(p);
 export const post = <T>(p: string, body?: unknown) =>
   api<T>(p, { method: "POST", body: body ? JSON.stringify(body) : undefined });

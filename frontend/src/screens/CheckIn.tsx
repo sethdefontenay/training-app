@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { get, patch, post, put } from "../api";
+import { get, patch, post, put, todayLocal } from "../api";
 
 type Metric = { values: { date: string; value: number }[]; average: number | null };
 type Sleep = { avg_efficiency: number | null; avg_asleep_min: number | null; nights: number };
@@ -24,7 +24,7 @@ const FIELDS: [string, string][] = [
   ["weight_kg", "Weight"],
 ];
 
-const today = () => new Date().toISOString().slice(0, 10);
+const today = todayLocal;
 
 export default function CheckIn() {
   const [ci, setCi] = useState<View | null>(null);

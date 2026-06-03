@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { del, get, post, put } from "../api";
+import { del, get, post, put, todayLocal } from "../api";
 
 type Meal = { id: number; name: string; slot: string; carbs_g: number | null; eaten: boolean };
 type Exercise = {
@@ -22,7 +22,7 @@ type DailyView = {
   wellbeing: { energy: number | null; motivation: number | null; stress: number | null; hunger: number | null };
 };
 
-const today = () => new Date().toISOString().slice(0, 10);
+const today = todayLocal;
 const METRICS = ["energy", "motivation", "stress", "hunger"] as const;
 
 export default function Today() {
