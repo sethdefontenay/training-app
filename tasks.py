@@ -91,6 +91,15 @@ def seed(c, email, password):
         c.run(f"uv run python -m app.seed {email} {password}", pty=True)
 
 
+@task(help={"file": "path to a Tidepool data-model JSON export"})
+def diabetes_import(c, file):
+    """Import a Tidepool data-model JSON export (glucose + insulin) into the DB.
+
+    Produce the JSON from t:connect/Tidepool tooling first; this ingests it (de-duped)."""
+    with c.cd(BACKEND):
+        c.run(f'uv run python -m app.import_diabetes "{file}"', pty=True)
+
+
 @task(help={"path": f"vault path (default {DEFAULT_VAULT})"})
 def import_vault(c, path=DEFAULT_VAULT):
     """Full migration: import the Obsidian plan (training days, exercises, schedule,

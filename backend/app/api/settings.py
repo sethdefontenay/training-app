@@ -12,9 +12,11 @@ from app.api.deps import CurrentUser, SessionDep
 from app.config import get_settings
 from app.services.settings import (
     GOOGLE_HEALTH_FIELDS,
+    TIDEPOOL_FIELDS,
     get_setting,
     google_health_config,
     set_setting,
+    tidepool_config,
 )
 
 router = APIRouter(prefix="/settings", tags=["settings"])
@@ -64,6 +66,36 @@ async def google_health_save(
             await set_setting(session, f"google_health.{key}", value)
     await session.commit()
     return await _gh_status(session)
+
+
+class TidepoolIn(BaseModel):
+    email: str | None = None
+    password: str | None = None
+
+
+async def _tidepool_status(session: SessionDep) -> dict[str, object]:
+    cfg = await tidepool_config(session)
+    return {
+        "connected": all(cfg.values()),
+        "fields": [{"key": k, "label": label, "set": bool(cfg[k])} for k, label in TIDEPOOL_FIELDS],
+    }
+
+
+@router.get("/tidepool")
+async def tidepool_status(session: SessionDep, user: CurrentUser) -> dict[str, object]:
+    return await _tidepool_status(session)
+
+
+@router.put("/tidepool")
+async def tidepool_save(
+    body: TidepoolIn, session: SessionDep, user: CurrentUser
+) -> dict[str, object]:
+    for key, _ in TIDEPOOL_FIELDS:
+        value = getattr(body, key)
+        if value is not None:
+            await set_setting(session, f"tidepool.{key}", value)
+    await session.commit()
+    return await _tidepool_status(session)
 
 
 # --- OAuth connect flow (browser navigations — not bearer-authenticated) ---

@@ -31,6 +31,14 @@ async def test_secrets_not_echoed(auth_client: AsyncClient) -> None:
     assert "super-secret-token" not in str(s)
 
 
+async def test_tidepool_save_then_connected(auth_client: AsyncClient) -> None:
+    assert (await auth_client.get("/api/v1/settings/tidepool")).json()["connected"] is False
+    await auth_client.put("/api/v1/settings/tidepool", json={"email": "a@b.com", "password": "pw"})
+    s = (await auth_client.get("/api/v1/settings/tidepool")).json()
+    assert s["connected"] is True
+    assert "pw" not in str(s)  # secret never echoed
+
+
 async def test_authorize_redirects_to_google(auth_client: AsyncClient) -> None:
     await auth_client.put(
         "/api/v1/settings/google-health", json={"client_id": "cid", "client_secret": "cs"}

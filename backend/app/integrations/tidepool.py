@@ -10,12 +10,14 @@ from dataclasses import dataclass
 from datetime import UTC, date, datetime, time
 from typing import Any, Protocol
 
+import httpx
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.config import get_settings
 from app.integrations.health import IntegrationNotConfigured
 from app.models import GlucoseReading, InsulinEvent
+
+_TIDEPOOL_BASE = "https://api.tidepool.org"
 
 # Standard CGM time-in-range band (mmol/L).
 TIR_LOW = 3.9
@@ -43,13 +45,45 @@ class TidepoolProvider(Protocol):
 
 
 class TidepoolClient:
-    """Real client shell — raises until Tidepool credentials are wired."""
+    """Live Tidepool API client: login (session token) -> GET /data -> parse.
+
+    Uses the session-token auth flow (still works as a proxy post-Keycloak). Returns the
+    same data-model objects parse_tidepool_export() handles.
+    """
+
+    def __init__(
+        self, email: str | None = None, password: str | None = None, base_url: str = _TIDEPOOL_BASE
+    ) -> None:
+        self._email = email
+        self._password = password
+        self._base = base_url
 
     async def fetch(self, start: date, end: date) -> tuple[list[GlucosePoint], list[InsulinPoint]]:
-        settings = get_settings()
-        if not getattr(settings, "tidepool_email", None):
-            raise IntegrationNotConfigured("Tidepool credentials not configured")
-        raise NotImplementedError  # pragma: no cover
+        if not (self._email and self._password):
+            raise IntegrationNotConfigured("Tidepool credentials not set — add them in Settings")
+        async with httpx.AsyncClient(timeout=60) as client:
+            login = await client.post(
+                f"{self._base}/auth/login", auth=(self._email, self._password)
+            )
+            if login.status_code != 200:
+                raise IntegrationNotConfigured("Tidepool login failed — check email/password")
+            token = login.headers.get("x-tidepool-session-token")
+            userid = login.json().get("userid")
+            if not token or not userid:
+                raise IntegrationNotConfigured("Tidepool login returned no session token")
+            resp = await client.get(
+                f"{self._base}/data/{userid}",
+                headers={"x-tidepool-session-token": token},
+                params={
+                    "startDate": f"{start.isoformat()}T00:00:00.000Z",
+                    "endDate": f"{end.isoformat()}T23:59:59.999Z",
+                },
+            )
+            resp.raise_for_status()
+            data = resp.json()
+        if not isinstance(data, list):
+            return [], []
+        return parse_tidepool_export(data)
 
 
 @dataclass

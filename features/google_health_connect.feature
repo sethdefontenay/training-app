@@ -45,3 +45,19 @@ Feature: Connect Google Health
     Given Google Health is connected
     When a sync runs
     Then steps and sleep are pulled using a freshly refreshed access token
+
+
+Feature: Connect Tidepool
+  As Seth, I want to save my Tidepool login once,
+  so the app pulls my glucose + insulin from the Tidepool API automatically.
+
+  Scenario: Save Tidepool credentials and connect
+    Given I am logged in and on the Settings screen
+    When I save my Tidepool email and password
+    Then Tidepool shows as connected
+    But the password is never returned to the client
+
+  Scenario: Pull glucose and insulin from the Tidepool API
+    Given Tidepool is connected
+    When I pull (or a check-in runs)
+    Then the app logs in, fetches the data-model records, and stores glucose + insulin

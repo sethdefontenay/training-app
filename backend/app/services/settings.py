@@ -32,3 +32,13 @@ async def google_health_config(session: AsyncSession) -> dict[str, str | None]:
 async def google_health_connected(session: AsyncSession) -> bool:
     cfg = await google_health_config(session)
     return all(cfg.values())
+
+
+TIDEPOOL_FIELDS = (
+    ("email", "Tidepool email"),
+    ("password", "Tidepool password"),
+)
+
+
+async def tidepool_config(session: AsyncSession) -> dict[str, str | None]:
+    return {f: await get_setting(session, f"tidepool.{f}") for f, _ in TIDEPOOL_FIELDS}

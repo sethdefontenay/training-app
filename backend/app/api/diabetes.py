@@ -17,12 +17,14 @@ from app.integrations.tidepool import (
     store_points,
     sync_diabetes,
 )
+from app.services.settings import tidepool_config
 
 router = APIRouter(prefix="/diabetes", tags=["diabetes"])
 
 
-def get_tidepool_provider() -> TidepoolProvider:
-    return TidepoolClient()
+async def get_tidepool_provider(session: SessionDep) -> TidepoolProvider:
+    cfg = await tidepool_config(session)
+    return TidepoolClient(email=cfg["email"], password=cfg["password"])
 
 
 ProviderDep = Annotated[TidepoolProvider, Depends(get_tidepool_provider)]
