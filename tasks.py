@@ -120,6 +120,24 @@ def import_vault(c, path=DEFAULT_VAULT):
         c.run(f'uv run python -m app.import_vault "{path}"', pty=True)
 
 
+@task(
+    help={
+        "base_url": "deployed app URL (https://...up.railway.app)",
+        "email": "login email",
+        "password": "login password",
+        "path": f"vault path (default {DEFAULT_VAULT})",
+    }
+)
+def import_vault_remote(c, base_url, email, password, path=DEFAULT_VAULT):
+    """Zip the local Obsidian vault and push it to a DEPLOYED instance via the API
+    (loads full history into prod without exposing the database). Idempotent."""
+    with c.cd(BACKEND):
+        c.run(
+            f'uv run python -m app.push_vault "{base_url}" "{email}" "{password}" "{path}"',
+            pty=True,
+        )
+
+
 # --- run -------------------------------------------------------------------
 
 

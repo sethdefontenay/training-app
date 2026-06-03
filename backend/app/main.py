@@ -12,6 +12,7 @@ from app.api import (
     checkin,
     daily,
     diabetes,
+    imports,
     plans,
     shopping,
     sync,
@@ -69,6 +70,7 @@ api_v1.include_router(sync.router)
 api_v1.include_router(diabetes.router)
 api_v1.include_router(plans.router)
 api_v1.include_router(settings_api.router)
+api_v1.include_router(imports.router)
 
 app.include_router(api_v1)
 
