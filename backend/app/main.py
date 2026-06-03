@@ -1,6 +1,9 @@
 """FastAPI application entrypoint."""
 
+from pathlib import Path
+
 from fastapi import APIRouter, FastAPI
+from fastapi.staticfiles import StaticFiles
 
 from app.api import (
     auth,
@@ -55,3 +58,10 @@ api_v1.include_router(plans.router)
 api_v1.include_router(settings_api.router)
 
 app.include_router(api_v1)
+
+# Serve the built PWA (single-service prod deploy) if a build was copied in.
+# Mounted last so it never shadows /health, /docs, or /api/v1/*. Skipped in local dev
+# (no ./static dir) where Vite serves the frontend instead.
+_static_dir = Path(__file__).resolve().parent.parent / "static"
+if _static_dir.is_dir():
+    app.mount("/", StaticFiles(directory=_static_dir, html=True), name="spa")
