@@ -7,7 +7,7 @@ import pytest
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models import DailyWellbeing, Measurement
+from app.models import DailyWellbeing, Measurement, SleepNight, StepsDay
 
 START = "2026-05-25"
 
@@ -41,6 +41,26 @@ async def test_measurements_prefill(auth_client: AsyncClient, session: AsyncSess
     await session.commit()
     ci = (await auth_client.post("/api/v1/check-ins", json={"started_on": START})).json()
     assert ci["measurements"]["waist_cm"] == 96
+
+
+async def test_checkin_includes_steps_sleep_and_latest_measurements(
+    auth_client: AsyncClient, session: AsyncSession
+) -> None:
+    session.add_all(
+        [
+            StepsDay(date=date(2026, 5, 24), steps=6000),
+            StepsDay(date=date(2026, 5, 25), steps=8000),
+            SleepNight(date=date(2026, 5, 25), asleep_min=472.0, efficiency=98.0),
+            Measurement(date=date(2026, 5, 20), waist_cm=96, weight_kg=94),
+        ]
+    )
+    await session.commit()
+    ci = (await auth_client.post("/api/v1/check-ins", json={"started_on": START})).json()
+    assert ci["steps_avg"] == 7000
+    assert ci["sleep"]["avg_efficiency"] == 98.0
+    assert ci["sleep"]["nights"] == 1
+    assert ci["latest_measurements"]["waist_cm"] == 96
+    assert ci["latest_measurements"]["weight_kg"] == 94
 
 
 async def test_reflections_saved(auth_client: AsyncClient) -> None:

@@ -28,7 +28,10 @@ class CheckInView(BaseModel):
     window_start: date
     window_end: date
     measurements: MeasurementOut | None
+    latest_measurements: dict[str, float | None]
     metrics: dict[str, dict[str, object]]
+    steps_avg: float | None
+    sleep: dict[str, float | int | None]
     sessions_logged: int
     worked_on: str | None
     struggles: str | None

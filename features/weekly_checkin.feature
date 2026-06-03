@@ -37,6 +37,22 @@ Feature: Weekly PT check-in
     When I start the weekly check-in
     Then those measurements are pre-filled
 
+  Scenario: Shows the last recorded value for every body metric
+    Given I last recorded each body metric on various recent dates
+    When I start the weekly check-in
+    Then I see the most recent value for each metric (waist, tummy, bum, thighs, weight)
+
+  Scenario: Shows recovery context — average steps/day and sleep quality
+    Given steps and sleep synced over the last 7 days
+    When I start the weekly check-in
+    Then I see my average steps per day
+    And my average sleep duration and efficiency for the window
+
+  Scenario: Enter today's measurements from the check-in
+    When I fill in today's measurements grid and save
+    Then today's measurements are recorded
+    And the check-in's last-measurement values update
+
   Scenario: Attach posed photos to the check-in
     When I add posed photos
     Then they are saved with this check-in

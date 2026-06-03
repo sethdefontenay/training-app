@@ -21,8 +21,11 @@ from app.schemas.checkin import (
 from app.schemas.tracking import MeasurementOut
 from app.services.checkin import (
     latest_measurement,
+    latest_per_metric,
     metric_summaries,
     sessions_logged,
+    sleep_summary,
+    steps_average,
     window_for,
 )
 
@@ -36,6 +39,9 @@ async def _assemble(session: SessionDep, ci: CheckIn) -> CheckInView:
     measurement = await latest_measurement(session, ci.window_start, ci.window_end)
     metrics = await metric_summaries(session, ci.window_start, ci.window_end)
     logged = await sessions_logged(session, ci.window_start, ci.window_end)
+    latest = await latest_per_metric(session, ci.window_end)
+    steps_avg = await steps_average(session, ci.window_start, ci.window_end)
+    sleep = await sleep_summary(session, ci.window_start, ci.window_end)
     m_out = (
         MeasurementOut(date=measurement.date, **{f: getattr(measurement, f) for f in _FIELDS})
         if measurement is not None
@@ -47,7 +53,10 @@ async def _assemble(session: SessionDep, ci: CheckIn) -> CheckInView:
         window_start=ci.window_start,
         window_end=ci.window_end,
         measurements=m_out,
+        latest_measurements=latest,
         metrics=metrics,
+        steps_avg=steps_avg,
+        sleep=sleep,
         sessions_logged=logged,
         worked_on=ci.worked_on,
         struggles=ci.struggles,

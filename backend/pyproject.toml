@@ -50,6 +50,7 @@ asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
 testpaths = ["tests"]
 addopts = "-q"
+bdd_features_base_dir = "../features"
 
 [build-system]
 requires = ["hatchling"]

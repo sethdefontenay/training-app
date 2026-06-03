@@ -10,9 +10,17 @@ from datetime import date, timedelta
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models import DailyWellbeing, Measurement, Session
+from app.models import DailyWellbeing, Measurement, Session, SleepNight, StepsDay
 
 METRICS = ("energy", "motivation", "stress", "hunger")
+MEASUREMENT_FIELDS = (
+    "waist_cm",
+    "tummy_cm",
+    "bum_cm",
+    "right_thigh_cm",
+    "left_thigh_cm",
+    "weight_kg",
+)
 
 
 def window_for(start_on: date) -> tuple[date, date]:
@@ -57,6 +65,52 @@ async def latest_measurement(
         .limit(1)
     )
     return row
+
+
+async def latest_per_metric(session: AsyncSession, on_or_before: date) -> dict[str, float | None]:
+    """Most recent recorded value for each body metric (may be from different dates)."""
+    out: dict[str, float | None] = {}
+    for field in MEASUREMENT_FIELDS:
+        col = getattr(Measurement, field)
+        value = await session.scalar(
+            select(col)
+            .where(Measurement.date <= on_or_before, col.is_not(None))
+            .order_by(Measurement.date.desc())
+            .limit(1)
+        )
+        out[field] = value
+    return out
+
+
+async def steps_average(
+    session: AsyncSession, window_start: date, window_end: date
+) -> float | None:
+    avg = await session.scalar(
+        select(func.avg(StepsDay.steps)).where(
+            StepsDay.date >= window_start, StepsDay.date <= window_end
+        )
+    )
+    return round(float(avg)) if avg is not None else None
+
+
+async def sleep_summary(
+    session: AsyncSession, window_start: date, window_end: date
+) -> dict[str, float | int | None]:
+    row = (
+        await session.execute(
+            select(
+                func.avg(SleepNight.efficiency),
+                func.avg(SleepNight.asleep_min),
+                func.count(SleepNight.id),
+            ).where(SleepNight.date >= window_start, SleepNight.date <= window_end)
+        )
+    ).one()
+    avg_eff, avg_asleep, nights = row
+    return {
+        "avg_efficiency": round(float(avg_eff), 1) if avg_eff is not None else None,
+        "avg_asleep_min": round(float(avg_asleep)) if avg_asleep is not None else None,
+        "nights": int(nights or 0),
+    }
 
 
 async def sessions_logged(session: AsyncSession, window_start: date, window_end: date) -> int:
