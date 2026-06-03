@@ -37,18 +37,36 @@ export default function Today() {
   if (!view) return <p className="text-slate-400">Loading…</p>;
 
   const toggleMeal = async (id: number, eaten: boolean) => {
-    await (eaten ? del(`/daily/${day}/meals/${id}/check`) : post(`/daily/${day}/meals/${id}/check`));
-    load();
+    // Optimistic flip — the checkbox is controlled, so without this it snaps
+    // back to its old state until the round-trip finishes (reads as "not working").
+    setView((v) =>
+      v ? { ...v, meals: v.meals.map((m) => (m.id === id ? { ...m, eaten: !eaten } : m)) } : v,
+    );
+    try {
+      await (eaten
+        ? del(`/daily/${day}/meals/${id}/check`)
+        : post(`/daily/${day}/meals/${id}/check`));
+    } finally {
+      load(); // reconcile with server truth (reverts the flip if the call failed)
+    }
   };
   const setMetric = async (k: string, v: number) => {
     await put(`/daily/${day}/wellbeing`, { [k]: v });
     load();
   };
   const toggleMobility = async (slug: string, done: boolean) => {
-    await (done
-      ? del(`/mobility/done?on=${day}&exercise_slug=${slug}`)
-      : post(`/mobility/done`, { date: day, exercise_slug: slug }));
-    load();
+    setView((v) =>
+      v
+        ? { ...v, mobility: v.mobility?.map((m) => (m.slug === slug ? { ...m, done: !done } : m)) ?? null }
+        : v,
+    );
+    try {
+      await (done
+        ? del(`/mobility/done?on=${day}&exercise_slug=${slug}`)
+        : post(`/mobility/done`, { date: day, exercise_slug: slug }));
+    } finally {
+      load();
+    }
   };
 
   return (
