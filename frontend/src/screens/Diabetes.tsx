@@ -35,7 +35,10 @@ export default function Diabetes() {
     type SerialApi = { requestPort: () => Promise<{ getInfo: () => SerialInfo }> };
     const serial = (navigator as unknown as { serial?: SerialApi }).serial;
     if (!serial) {
-      setMsg("This browser has no WebSerial — use Chrome or Edge on desktop.");
+      setMsg(
+        "No WebSerial here — use Firefox 151+ (you may need dom.serial.enabled in " +
+          "about:config) or Chrome/Edge desktop.",
+      );
       return;
     }
     try {
