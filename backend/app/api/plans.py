@@ -15,7 +15,15 @@ from app.integrations.ingest import (
     GmailProvider,
     IngestionAgent,
 )
-from app.models import Exercise, MobilityDone, Plan, Prescription, TrainingDay, WeekdaySchedule
+from app.models import (
+    Exercise,
+    Meal,
+    MobilityDone,
+    Plan,
+    Prescription,
+    TrainingDay,
+    WeekdaySchedule,
+)
 from app.schemas.plan_ingest import CommitRequest, IngestRequest, ProposedPlan
 from app.services.plan_commit import commit_plan
 
@@ -82,7 +90,7 @@ async def current_detail(session: SessionDep, user: CurrentUser) -> dict[str, ob
             selectinload(Plan.training_days)
             .selectinload(TrainingDay.prescriptions)
             .selectinload(Prescription.exercise),
-            selectinload(Plan.meals),
+            selectinload(Plan.meals).selectinload(Meal.ingredients),
             selectinload(Plan.schedule).selectinload(WeekdaySchedule.training_day),
         )
     )
@@ -117,6 +125,10 @@ async def current_detail(session: SessionDep, user: CurrentUser) -> dict[str, ob
             "protein_g": m.protein_g,
             "carbs_g": m.carbs_g,
             "fat_g": m.fat_g,
+            "ingredients": [
+                {"name": i.name, "quantity": i.quantity, "unit": i.unit}
+                for i in sorted(m.ingredients, key=lambda x: x.order)
+            ],
         }
         for m in sorted(plan.meals, key=lambda x: x.meal_number)
     ]

@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { ApiError, get } from "../api";
 
 type Ex = { slug: string; name: string; sets_x_reps: string; prescribed_weight: string | null };
+type Ingredient = { name: string; quantity: number | null; unit: string | null };
 type Meal = {
   meal_number: number;
   slot: string;
@@ -10,6 +11,7 @@ type Meal = {
   protein_g: number | null;
   carbs_g: number | null;
   fat_g: number | null;
+  ingredients: Ingredient[];
 };
 type Detail = {
   source: string | null;
@@ -36,6 +38,7 @@ const WEEKDAYS = [
 export default function Plan() {
   const [d, setD] = useState<Detail | null>(null);
   const [none, setNone] = useState(false);
+  const [openMeal, setOpenMeal] = useState<number | null>(null);
 
   useEffect(() => {
     get<Detail>("/plans/current/detail")
@@ -112,17 +115,43 @@ export default function Plan() {
       <section>
         <h2 className="mb-2 font-semibold">Meals</h2>
         <ul className="space-y-1 text-sm">
-          {d.meals.map((m) => (
-            <li key={m.meal_number} className="rounded bg-slate-800 px-3 py-2">
-              <div className="flex justify-between">
-                <span>{m.name}</span>
-                <span className="text-amber-300">{m.carbs_g ?? "—"} g carbs</span>
-              </div>
-              <div className="text-slate-400">
-                {m.calories ?? "—"} kcal · {m.protein_g ?? "—"}P · {m.fat_g ?? "—"}F
-              </div>
-            </li>
-          ))}
+          {d.meals.map((m) => {
+            const open = openMeal === m.meal_number;
+            return (
+              <li key={m.meal_number} className="rounded bg-slate-800 px-3 py-2">
+                <button
+                  type="button"
+                  onClick={() => setOpenMeal(open ? null : m.meal_number)}
+                  className="w-full text-left"
+                >
+                  <div className="flex justify-between">
+                    <span>
+                      {open ? "▾" : "▸"} {m.name}
+                    </span>
+                    <span className="text-amber-300">{m.carbs_g ?? "—"} g carbs</span>
+                  </div>
+                  <div className="text-slate-400">
+                    {m.calories ?? "—"} kcal · {m.protein_g ?? "—"}P · {m.fat_g ?? "—"}F
+                  </div>
+                </button>
+                {open && (
+                  <ul className="mt-2 border-t border-slate-700 pt-2">
+                    {m.ingredients.length === 0 && (
+                      <li className="text-slate-500">No ingredients recorded.</li>
+                    )}
+                    {m.ingredients.map((ing, i) => (
+                      <li key={i} className="flex justify-between text-slate-300">
+                        <span>{ing.name}</span>
+                        <span className="text-slate-400">
+                          {ing.quantity != null ? ing.quantity : ""} {ing.unit ?? ""}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </li>
+            );
+          })}
         </ul>
       </section>
 

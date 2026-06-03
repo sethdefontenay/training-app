@@ -4,25 +4,30 @@ import { get, post, put } from "../api";
 type Field = { key: string; label: string; set: boolean };
 type Status = { connected: boolean; fields: Field[] };
 
+const GH_MESSAGES: Record<string, string> = {
+  connected: "Connected to Google Health ✓",
+  denied: "Google sign-in was cancelled.",
+  bad_state: "Connect failed (state mismatch) — try again.",
+  exchange_failed: "Google rejected the token exchange — check client ID/secret.",
+  missing_client: "Save your client ID & secret first, then Connect.",
+  no_refresh_token:
+    "Connected, but no refresh token — revoke app access in your Google account and Connect again.",
+};
+
+function initialMessage(): string | null {
+  const outcome = new URLSearchParams(window.location.search).get("gh");
+  return outcome ? (GH_MESSAGES[outcome] ?? null) : null;
+}
+
 export default function Settings() {
   const [status, setStatus] = useState<Status | null>(null);
   const [vals, setVals] = useState<Record<string, string>>({});
-  const [msg, setMsg] = useState<string | null>(null);
+  const [msg, setMsg] = useState<string | null>(initialMessage);
 
   const load = () => get<Status>("/settings/google-health").then(setStatus);
   useEffect(() => {
     load();
-    const outcome = new URLSearchParams(window.location.search).get("gh");
-    const messages: Record<string, string> = {
-      connected: "Connected to Google Health ✓",
-      denied: "Google sign-in was cancelled.",
-      bad_state: "Connect failed (state mismatch) — try again.",
-      exchange_failed: "Google rejected the token exchange — check client ID/secret.",
-      missing_client: "Save your client ID & secret first, then Connect.",
-      no_refresh_token: "Connected, but no refresh token returned — revoke app access in your Google account and Connect again.",
-    };
-    if (outcome && messages[outcome]) {
-      setMsg(messages[outcome]);
+    if (new URLSearchParams(window.location.search).get("gh")) {
       window.history.replaceState({}, "", "/settings");
     }
   }, []);

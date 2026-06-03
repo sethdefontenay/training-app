@@ -125,6 +125,10 @@ async def test_current_plan_detail(auth_client: AsyncClient) -> None:
     assert d["training_days"][0]["label"] == "Training Day 1"
     assert d["training_days"][0]["exercises"][0]["slug"] == "leg-press-machine"
     assert d["meals"][0]["carbs_g"] == 74
+    ing = d["meals"][0]["ingredients"][0]
+    assert ing["name"] == "oats"
+    assert ing["quantity"] == 80
+    assert ing["unit"] == "g"
 
 
 async def test_ingest_unconfigured_503(auth_client: AsyncClient) -> None:
