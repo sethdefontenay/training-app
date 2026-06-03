@@ -92,7 +92,28 @@ async def test_rest_day_has_no_workout_but_meals(
     await _seed_plan(session)
     view = (await auth_client.get(f"/api/v1/daily/{REST.isoformat()}")).json()
     assert view["workout"] is None
+    assert view["mobility"] is None  # mobility only shows on workout days
     assert len(view["meals"]) == 1
+
+
+async def test_mobility_section_on_workout_day(
+    auth_client: AsyncClient, session: AsyncSession
+) -> None:
+    await _seed_plan(session)
+    # seed the mobility catalog via a prior done
+    await auth_client.post(
+        "/api/v1/mobility/done", json={"date": "2026-05-01", "exercise_slug": "bird-dog"}
+    )
+    view = (await auth_client.get(f"/api/v1/daily/{TRAIN.isoformat()}")).json()
+    bd = next(m for m in view["mobility"] if m["slug"] == "bird-dog")
+    assert bd["done"] is False
+
+    await auth_client.post(
+        "/api/v1/mobility/done",
+        json={"date": TRAIN.isoformat(), "exercise_slug": "bird-dog"},
+    )
+    view2 = (await auth_client.get(f"/api/v1/daily/{TRAIN.isoformat()}")).json()
+    assert next(m for m in view2["mobility"] if m["slug"] == "bird-dog")["done"] is True
 
 
 async def test_meal_check_records_adherence(

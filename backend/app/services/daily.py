@@ -10,8 +10,10 @@ from sqlalchemy.orm import selectinload
 from app.models import (
     DailyLog,
     DailyWellbeing,
+    Exercise,
     Meal,
     MealCheck,
+    MobilityDone,
     Plan,
     Prescription,
     Session,
@@ -24,9 +26,35 @@ from app.schemas.daily import (
     DailyView,
     ExerciseLine,
     MealLine,
+    MobilityItem,
     WellbeingIn,
     WorkoutBlock,
 )
+
+
+async def _mobility_for(session: AsyncSession, day: date) -> list[MobilityItem]:
+    """The mobility checklist = the moves you actually do (from history), with today's
+    done-state. (Derived from MobilityDone; upgrade to a prescribed round when available.)"""
+    catalog = (
+        await session.execute(
+            select(Exercise.slug, Exercise.name)
+            .join(MobilityDone, MobilityDone.exercise_id == Exercise.id)
+            .distinct()
+            .order_by(Exercise.name)
+        )
+    ).all()
+    done_today = set(
+        (
+            await session.execute(
+                select(Exercise.slug)
+                .join(MobilityDone, MobilityDone.exercise_id == Exercise.id)
+                .where(MobilityDone.date == day)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    return [MobilityItem(slug=s, name=n, done=s in done_today) for s, n in catalog]
 
 
 def _target_sets(sets_x_reps: str) -> int | None:
@@ -90,12 +118,16 @@ async def resolve_day(session: AsyncSession, day: date) -> DailyView:
     plan = await _current_plan(session)
 
     workout: WorkoutBlock | None = None
+    mobility: list[MobilityItem] | None = None
     meals: list[MealLine] = []
     daily_carbs_total: int | None = None
     targets: dict[str, float | int | None] = {}
 
     if plan is not None:
         workout = await _workout_block(session, plan, weekday, day)
+        # Show a mobility section on workout days.
+        if workout is not None:
+            mobility = await _mobility_for(session, day)
         plan_meals = (
             (
                 await session.execute(
@@ -147,6 +179,7 @@ async def resolve_day(session: AsyncSession, day: date) -> DailyView:
         weekday=day.strftime("%A"),
         has_plan=plan is not None,
         workout=workout,
+        mobility=mobility,
         meals=meals,
         daily_carbs_total=daily_carbs_total,
         targets=targets,

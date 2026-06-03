@@ -15,6 +15,7 @@ type DailyView = {
   weekday: string;
   has_plan: boolean;
   workout: { label: string; exercises: Exercise[] } | null;
+  mobility: { slug: string; name: string; done: boolean }[] | null;
   meals: Meal[];
   daily_carbs_total: number | null;
   steps: { steps: number | null; target: number | null };
@@ -43,6 +44,10 @@ export default function Today() {
     await put(`/daily/${day}/wellbeing`, { [k]: v });
     load();
   };
+  const markMobility = async (slug: string) => {
+    await post(`/mobility/done`, { date: day, exercise_slug: slug });
+    load();
+  };
 
   return (
     <div className="space-y-6">
@@ -69,6 +74,27 @@ export default function Today() {
         </section>
       ) : (
         <p className="text-slate-400">Rest day — no workout scheduled.</p>
+      )}
+
+      {view.mobility && view.mobility.length > 0 && (
+        <section>
+          <h2 className="mb-2 font-semibold">Mobility</h2>
+          <ul className="space-y-1">
+            {view.mobility.map((m) => (
+              <li key={m.slug} className="rounded bg-slate-800 px-3 py-2">
+                <label className={`flex items-center gap-2 ${m.done ? "text-slate-500" : ""}`}>
+                  <input
+                    type="checkbox"
+                    checked={m.done}
+                    disabled={m.done}
+                    onChange={() => markMobility(m.slug)}
+                  />
+                  {m.name}
+                </label>
+              </li>
+            ))}
+          </ul>
+        </section>
       )}
 
       <section>

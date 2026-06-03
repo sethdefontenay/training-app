@@ -32,6 +32,12 @@ class WorkoutBlock(BaseModel):
     exercises: list[ExerciseLine]
 
 
+class MobilityItem(BaseModel):
+    slug: str
+    name: str
+    done: bool
+
+
 class MealLine(BaseModel):
     id: int
     meal_number: int
@@ -49,6 +55,7 @@ class DailyView(BaseModel):
     weekday: str
     has_plan: bool
     workout: WorkoutBlock | None
+    mobility: list[MobilityItem] | None
     meals: list[MealLine]
     daily_carbs_total: int | None
     targets: dict[str, float | int | None]
