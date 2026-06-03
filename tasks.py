@@ -69,9 +69,20 @@ def db_reset(c):
 
 @task
 def migrate(c):
-    """Apply Alembic migrations (upgrade head)."""
+    """Apply Alembic migrations (upgrade head) to the local DB."""
     with c.cd(BACKEND):
         c.run("uv run alembic upgrade head")
+
+
+@task(help={"url": "remote DATABASE_URL (Railway Postgres PUBLIC connection string)"})
+def migrate_prod(c, url):
+    """Apply migrations to a REMOTE DB (e.g. Railway). Pass the public DATABASE_URL.
+
+    Get it from Railway -> your Postgres service -> Variables -> the PUBLIC URL
+    (or 'Connect' tab). Scheme is normalized to asyncpg automatically.
+    """
+    with c.cd(BACKEND):
+        c.run(f'DATABASE_URL="{url}" uv run alembic upgrade head', pty=True)
 
 
 @task(help={"message": "short migration message"})
