@@ -29,6 +29,10 @@ class Settings(BaseSettings):
     google_redirect_uri: str = "http://localhost:8000/api/v1/settings/google-health/callback"
     frontend_url: str = "http://localhost:5173"
 
+    # Optional: create/refresh the single user on startup (handy for first prod deploy).
+    seed_email: str | None = None
+    seed_password: str | None = None
+
     @field_validator("database_url")
     @classmethod
     def _ensure_asyncpg(cls, v: str) -> str:

@@ -1,5 +1,7 @@
 """FastAPI application entrypoint."""
 
+from collections.abc import AsyncGenerator
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import APIRouter, FastAPI
@@ -20,13 +22,24 @@ from app.api import (
     settings as settings_api,
 )
 from app.config import get_settings
+from app.seed import create_user
 
 settings = get_settings()
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
+    # First-deploy convenience: create/refresh the single user from env vars.
+    if settings.seed_email and settings.seed_password:
+        await create_user(settings.seed_email, settings.seed_password)
+    yield
+
 
 app = FastAPI(
     title="Training App API",
     version="0.1.0",
     docs_url="/docs",
+    lifespan=lifespan,
 )
 
 
