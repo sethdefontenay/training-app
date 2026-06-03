@@ -74,3 +74,35 @@ async def test_unconfigured_surfaces_503(auth_client: AsyncClient) -> None:
     app.dependency_overrides.pop(get_tidepool_provider, None)
     resp = await auth_client.post("/api/v1/diabetes/sync", params=PARAMS)
     assert resp.status_code == 503
+
+
+def test_parse_tidepool_export() -> None:
+    from app.integrations.tidepool import parse_tidepool_export
+
+    data = [
+        {"type": "cbg", "value": 421, "units": "mg/dL", "time": "2026-05-25T08:00:00Z"},
+        {"type": "smbg", "value": 6.5, "units": "mmol/L", "time": "2026-05-25T09:00:00Z"},
+        {"type": "bolus", "subType": "normal", "normal": 7.75, "time": "2026-05-25T08:05:00Z"},
+        {"type": "basal", "rate": 0.8, "time": "2026-05-25T00:00:00Z"},
+    ]
+    glucose, insulin = parse_tidepool_export(data)
+    assert len(glucose) == 2
+    assert glucose[0].mmol_l == round(421 / 18.0182, 1)  # mg/dL -> mmol/L
+    assert len(insulin) == 2
+    assert any(p.units == 7.75 for p in insulin)
+
+
+async def test_upload_ingests_export(auth_client: AsyncClient) -> None:
+    import json
+
+    payload = [
+        {"type": "cbg", "value": 6.0, "units": "mmol/L", "time": "2026-05-25T08:00:00Z"},
+        {"type": "bolus", "subType": "normal", "normal": 4.0, "time": "2026-05-25T08:05:00Z"},
+    ]
+    files = {"file": ("export.json", json.dumps(payload).encode(), "application/json")}
+    resp = await auth_client.post("/api/v1/diabetes/upload", files=files)
+    assert resp.status_code == 200
+    assert resp.json() == {"glucose_added": 1, "insulin_added": 1}
+
+    resp2 = await auth_client.post("/api/v1/diabetes/upload", files=files)
+    assert resp2.json() == {"glucose_added": 0, "insulin_added": 0}  # deduped

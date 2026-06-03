@@ -62,6 +62,12 @@ Feature: Diabetes data via Tidepool
     Then the failure is surfaced to me
     And I can enter the key figures manually if I need to
 
+  Scenario: Upload a Tidepool data-model JSON export directly (no Tidepool cloud)
+    Given a Tidepool data-model JSON export with glucose and bolus records
+    When I upload it on the diabetes screen
+    Then the glucose and insulin records are stored to my record
+    And re-uploading the same file adds no duplicates
+
   Scenario: I can refresh diabetes data on demand before finishing the check-in
     Given I uploaded my pump to Tidepool after starting the check-in
     When I refresh the diabetes data

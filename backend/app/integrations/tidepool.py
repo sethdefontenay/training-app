@@ -7,8 +7,8 @@ upload is surfaced honestly (pump_uploaded=False) — never fabricated.
 """
 
 from dataclasses import dataclass
-from datetime import date, datetime, time
-from typing import Protocol
+from datetime import UTC, date, datetime, time
+from typing import Any, Protocol
 
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -106,6 +106,102 @@ async def glucose_summary(
         "time_in_range_pct": round(100 * len(in_range) / len(values), 1),
         "count": len(values),
     }
+
+
+_MGDL_TO_MMOL = 1 / 18.0182
+UPLOAD_SOURCE = "tidepool-upload"
+
+
+def parse_tidepool_export(
+    data: list[dict[str, Any]],
+) -> tuple[list[GlucosePoint], list[InsulinPoint]]:
+    """Parse a Tidepool data-model JSON array (open-source schema) into points.
+
+    Glucose: cbg/smbg (value + units, mg/dL converted to mmol/L). Insulin: bolus
+    (normal + extended units). Times are ISO-8601 'time' fields.
+    """
+    glucose: list[GlucosePoint] = []
+    insulin: list[InsulinPoint] = []
+    for d in data:
+        kind = d.get("type")
+        raw_time = d.get("time")
+        if not isinstance(raw_time, str):
+            continue
+        ts = datetime.fromisoformat(raw_time.replace("Z", "+00:00"))
+        if kind in ("cbg", "smbg"):
+            value = d.get("value")
+            if value is None:
+                continue
+            mmol = float(value) * _MGDL_TO_MMOL if d.get("units") == "mg/dL" else float(value)
+            glucose.append(GlucosePoint(ts=ts, mmol_l=round(mmol, 1)))
+        elif kind == "bolus":
+            units = float(d.get("normal", 0) or 0) + float(d.get("extended", 0) or 0)
+            if units:
+                insulin.append(InsulinPoint(ts=ts, kind="bolus", units=units))
+        elif kind == "basal":
+            rate = d.get("rate")
+            if rate is not None:
+                insulin.append(InsulinPoint(ts=ts, kind="basal", units=float(rate)))
+    return glucose, insulin
+
+
+def _norm(dt: datetime) -> datetime:
+    """Naive-UTC, so timestamp de-dup is consistent across sqlite/postgres + re-uploads."""
+    return dt.astimezone(UTC).replace(tzinfo=None) if dt.tzinfo else dt
+
+
+async def store_points(
+    session: AsyncSession, glucose: list[GlucosePoint], insulin: list[InsulinPoint]
+) -> tuple[int, int]:
+    """Insert points, de-duplicated by timestamp (re-uploads + incremental files safe)."""
+    g_added = 0
+    if glucose:
+        times = [_norm(g.ts) for g in glucose]
+        seen = set(
+            (
+                await session.execute(
+                    select(GlucoseReading.ts).where(
+                        GlucoseReading.ts >= min(times), GlucoseReading.ts <= max(times)
+                    )
+                )
+            )
+            .scalars()
+            .all()
+        )
+        for gp, ts in zip(glucose, times, strict=True):
+            if ts not in seen:
+                session.add(GlucoseReading(ts=ts, mmol_l=gp.mmol_l, source=UPLOAD_SOURCE))
+                seen.add(ts)
+                g_added += 1
+    i_added = 0
+    if insulin:
+        times = [_norm(e.ts) for e in insulin]
+        seen = set(
+            (
+                await session.execute(
+                    select(InsulinEvent.ts).where(
+                        InsulinEvent.ts >= min(times), InsulinEvent.ts <= max(times)
+                    )
+                )
+            )
+            .scalars()
+            .all()
+        )
+        for ip, ts in zip(insulin, times, strict=True):
+            if ts not in seen:
+                session.add(
+                    InsulinEvent(
+                        ts=ts,
+                        kind=ip.kind,
+                        units=ip.units,
+                        carbs_g=ip.carbs_g,
+                        source=UPLOAD_SOURCE,
+                    )
+                )
+                seen.add(ts)
+                i_added += 1
+    await session.commit()
+    return g_added, i_added
 
 
 async def insulin_count(session: AsyncSession, start: date, end: date) -> int:

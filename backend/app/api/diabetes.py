@@ -1,9 +1,10 @@
 """Diabetes record endpoints (Tidepool pull + record view). Seth's own record."""
 
+import json
 from datetime import date, timedelta
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 
 from app.api.deps import CurrentUser, SessionDep
 from app.integrations.health import IntegrationNotConfigured
@@ -12,6 +13,8 @@ from app.integrations.tidepool import (
     TidepoolProvider,
     glucose_summary,
     insulin_count,
+    parse_tidepool_export,
+    store_points,
     sync_diabetes,
 )
 
@@ -49,6 +52,26 @@ async def sync(
         "insulin_synced": result.insulin,
         "pump_uploaded": result.pump_uploaded,
     }
+
+
+@router.post("/upload")
+async def upload(
+    session: SessionDep,
+    user: CurrentUser,
+    file: Annotated[UploadFile, File()],
+) -> dict[str, int]:
+    """Ingest a Tidepool data-model JSON export directly (no Tidepool cloud needed)."""
+    try:
+        data = json.loads(await file.read())
+    except json.JSONDecodeError as e:
+        raise HTTPException(status_code=400, detail="Invalid JSON file") from e
+    if not isinstance(data, list):
+        raise HTTPException(
+            status_code=400, detail="Expected a JSON array of Tidepool data objects"
+        )
+    glucose, insulin = parse_tidepool_export(data)
+    g_added, i_added = await store_points(session, glucose, insulin)
+    return {"glucose_added": g_added, "insulin_added": i_added}
 
 
 @router.get("/record")
