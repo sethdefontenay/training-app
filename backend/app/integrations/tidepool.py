@@ -108,9 +108,9 @@ async def sync_diabetes(
     )
     await session.execute(delete(InsulinEvent).where(InsulinEvent.ts >= lo, InsulinEvent.ts <= hi))
     for g in glucose:
-        session.add(GlucoseReading(ts=g.ts, mmol_l=g.mmol_l))
+        session.add(GlucoseReading(ts=_norm(g.ts), mmol_l=g.mmol_l))
     for i in insulin:
-        session.add(InsulinEvent(ts=i.ts, kind=i.kind, units=i.units, carbs_g=i.carbs_g))
+        session.add(InsulinEvent(ts=_norm(i.ts), kind=i.kind, units=i.units, carbs_g=i.carbs_g))
     await session.commit()
     return DiabetesSyncResult(
         glucose=len(glucose), insulin=len(insulin), pump_uploaded=len(insulin) > 0

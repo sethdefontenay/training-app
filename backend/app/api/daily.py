@@ -1,6 +1,6 @@
 """Daily task list endpoints: the day view, wellbeing, daily log, meal adherence."""
 
-from datetime import date
+from datetime import UTC, date, datetime
 
 from fastapi import APIRouter, status
 from sqlalchemy import select
@@ -65,10 +65,12 @@ async def check_meal(
     existing = await session.scalar(
         select(MealCheck).where(MealCheck.date == day, MealCheck.meal_id == meal_id)
     )
+    now = datetime.now(UTC)
     if existing is None:
-        session.add(MealCheck(date=day, meal_id=meal_id, eaten=True))
+        session.add(MealCheck(date=day, meal_id=meal_id, eaten=True, checked_at=now))
     else:
         existing.eaten = True
+        existing.checked_at = now
     await session.commit()
     return {"eaten": True}
 
