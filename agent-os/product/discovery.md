@@ -93,9 +93,16 @@ The PT sends a fresh plan ~every 6 weeks. Instead of hand-entering it, an in-app
 - **Auth:** single-user **email + password**, long-lived JWT session on the trusted phone.
 - **Home / navigation:** **Home is a separate hub** (dashboard/launcher), not the daily list — because non-daily areas (weekly shopping list, PT check-in) need a place to live. Login → Home. Home launches Today (daily anchor, most prominent) + the non-daily areas. Every screen has a **home** control (→ Home hub) and a **back** control (one step). The **weekly shopping list** is a first-class non-daily area (generated from the plan's meals, items checkable).
 
+## Decisions added during the build (kept in sync with `features/`)
+
+- **Daily mobility section** shows on **workout days**, derived from the mobility moves actually logged (MobilityDone), with today's done-state; items tick/un-tick. (Upgrade to a prescribed round if a Mobility source is parsed.)
+- **Meals and mobility can be un-checked** (not just checked); shopping toggles too.
+- **Current plan detail** is an aggregated read-only view: schedule, training days + exercises, meals (expandable to ingredient quantities/units), targets, days-since-start.
+- **Google Health = OAuth offline access** (client id/secret + refresh token), connected once via Settings ("Connect with Google" → consent → refresh token captured server-side) or by pasting a refresh token. NOT an API key. Live client ported from `google-health-fetch` (v4 steps rollup + sleep dataPoints).
+
 ## BDD suite status (in `features/`)
 
-Drafted, declarative style (navigation is necessarily screen-named): `home`, `navigation`, `daily_task_list`, `workout_logging`, `exercise_progression`, `plan_ingestion`, `shopping_list`, `weekly_checkin`, `diabetes_data`, `health_sync_steps_sleep`, `measurements`, `mobility`, `auth`, `obsidian_import` — 14 files. Covers all v1 domains (insights deferred).
+Declarative style (navigation is necessarily screen-named): `home`, `navigation`, `daily_task_list`, `workout_logging`, `exercise_progression`, `plan_ingestion`, `plan_detail`, `shopping_list`, `weekly_checkin`, `diabetes_data`, `health_sync_steps_sleep`, `google_health_connect`, `measurements`, `mobility`, `auth`, `obsidian_import` — 16 files. Kept in sync with features as they're built/changed.
 
 ## Open questions
 

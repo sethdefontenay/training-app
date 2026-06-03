@@ -50,17 +50,33 @@ Feature: Daily task list
     And the meal's carb figure is unchanged
     # Actual intake is reported to my PT via MyFitnessPal, outside this app
 
-  # --- Activities ---
+  Scenario: A checked meal can be un-checked
+    Given I checked off "Meal 1 — Breakfast" as eaten
+    When I un-check it
+    Then today no longer records that meal as eaten
+
+  # --- Activities & mobility ---
 
   Scenario: Workout progress reflects logged sets, not a manual tick
     Given "Training Day 1" prescribes "Leg Press Machine" at 4 × 15
     When I log 2 sets for "Leg Press Machine"
     Then today's list shows "Leg Press Machine" at 2 of 4 sets
 
-  Scenario: Mobility exercises are ticked off individually
-    Given today's "Mobility" round includes "Bird Dog"
+  Scenario: A mobility section appears on workout days
+    When I open today's list
+    Then I see a mobility section with my mobility moves to tick off
+
+  Scenario: A rest day shows no mobility section
+    Given today is Sunday 2026-05-31 with no training scheduled
+    When I open today's list
+    Then there is no mobility section
+
+  Scenario: Mobility moves are ticked off individually, and can be un-ticked
+    Given today's mobility includes "Bird Dog"
     When I mark "Bird Dog" done
     Then today's list shows "Bird Dog" as completed
+    When I un-mark "Bird Dog"
+    Then "Bird Dog" is no longer completed
 
   # --- Daily wellbeing (feeds the weekly check-in) ---
 
