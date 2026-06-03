@@ -4,7 +4,8 @@ from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import APIRouter, FastAPI
+from fastapi import APIRouter, FastAPI, HTTPException
+from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from app.api import (
@@ -79,4 +80,21 @@ app.include_router(api_v1)
 # (no ./static dir) where Vite serves the frontend instead.
 _static_dir = Path(__file__).resolve().parent.parent / "static"
 if _static_dir.is_dir():
-    app.mount("/", StaticFiles(directory=_static_dir, html=True), name="spa")
+    _assets = _static_dir / "assets"
+    if _assets.is_dir():
+        app.mount("/assets", StaticFiles(directory=_assets), name="assets")
+
+    @app.get("/{full_path:path}", include_in_schema=False)
+    async def spa(full_path: str) -> FileResponse:
+        # Real file (sw.js, manifest, favicon, …) -> serve it; otherwise the SPA's
+        # index.html so client-side routes (e.g. /settings) work on hard navigation.
+        if full_path.startswith("api/") or full_path in {"health", "docs", "openapi.json"}:
+            raise HTTPException(status_code=404)
+        candidate = (_static_dir / full_path).resolve()
+        if (
+            full_path
+            and candidate.is_file()
+            and str(candidate).startswith(str(_static_dir.resolve()))
+        ):
+            return FileResponse(candidate)
+        return FileResponse(_static_dir / "index.html")
