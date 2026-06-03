@@ -1,11 +1,13 @@
 """Manual sync trigger for steps + sleep (also intended for scheduled + on-open runs)."""
 
-from datetime import date, timedelta
+from datetime import datetime, timedelta
 from typing import Annotated
+from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, HTTPException, status
 
 from app.api.deps import CurrentUser, SessionDep
+from app.config import get_settings
 from app.integrations.health import (
     GoogleHealthProvider,
     HealthProvider,
@@ -15,6 +17,7 @@ from app.integrations.health import (
 from app.services.settings import google_health_config
 
 router = APIRouter(prefix="/sync", tags=["sync"])
+_settings = get_settings()
 
 
 async def get_health_provider(session: SessionDep) -> HealthProvider:
@@ -23,6 +26,7 @@ async def get_health_provider(session: SessionDep) -> HealthProvider:
         client_id=cfg["client_id"],
         client_secret=cfg["client_secret"],
         refresh_token=cfg["refresh_token"],
+        tz=_settings.timezone,
     )
 
 
@@ -36,7 +40,9 @@ async def sync_health(
     provider: ProviderDep,
     days: int = 7,
 ) -> dict[str, object]:
-    end = date.today()
+    # "Today" in the user's timezone, not the server's UTC clock — otherwise the
+    # window trails a day for UTC+ users and never writes a row for their today.
+    end = datetime.now(ZoneInfo(_settings.timezone)).date()
     start = end - timedelta(days=days - 1)
     try:
         result = await sync_steps_sleep(session, provider, start, end)

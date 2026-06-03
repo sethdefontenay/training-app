@@ -13,6 +13,11 @@ class Settings(BaseSettings):
     app_name: str = "training-app"
     environment: str = "development"
 
+    # The user's local timezone. Used for "today" boundaries (health sync window,
+    # daily-data day buckets) so they match the phone's local date rather than the
+    # server's UTC clock. Single user → single zone.
+    timezone: str = "Pacific/Auckland"
+
     # Where uploaded check-in photos are stored (object storage in prod; local dir for dev).
     upload_dir: str = "uploads"
 
