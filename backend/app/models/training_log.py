@@ -3,7 +3,7 @@
 from datetime import date, datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import Date, ForeignKey, Text, UniqueConstraint
+from sqlalchemy import Date, DateTime, ForeignKey, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base, TimestampMixin
@@ -69,4 +69,6 @@ class MealCheck(Base, TimestampMixin):
     date: Mapped[date] = mapped_column(Date, index=True)
     meal_id: Mapped[int] = mapped_column(ForeignKey("meal.id", ondelete="CASCADE"), index=True)
     eaten: Mapped[bool] = mapped_column(default=True)
-    checked_at: Mapped[datetime | None] = mapped_column(default=None)
+    # tz-aware, matching every other timestamp in the schema (created_at,
+    # glucose/insulin ts). asyncpg rejects a tz-aware value into a naive column.
+    checked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
