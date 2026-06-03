@@ -29,6 +29,29 @@ export default function Diabetes() {
     }
   };
 
+  const detectPump = async () => {
+    setMsg(null);
+    type SerialInfo = { usbVendorId?: number; usbProductId?: number };
+    type SerialApi = { requestPort: () => Promise<{ getInfo: () => SerialInfo }> };
+    const serial = (navigator as unknown as { serial?: SerialApi }).serial;
+    if (!serial) {
+      setMsg("This browser has no WebSerial — use Chrome or Edge on desktop.");
+      return;
+    }
+    try {
+      const port = await serial.requestPort();
+      const info = port.getInfo();
+      const hex = (n?: number) => (n != null ? n.toString(16) : "?");
+      setMsg(
+        `Detected a serial device (vendor 0x${hex(info.usbVendorId)}, product 0x${hex(
+          info.usbProductId,
+        )}). Decoding the Tandem protocol isn't built yet — for now, export JSON and upload above.`,
+      );
+    } catch {
+      setMsg("No device selected, or access was denied.");
+    }
+  };
+
   const upload = async (file: File) => {
     setMsg("Uploading…");
     const fd = new FormData();
@@ -68,9 +91,14 @@ export default function Diabetes() {
         />
       </section>
 
-      <button onClick={sync} className="rounded bg-slate-800 px-3 py-1 text-sm">
-        Or pull from Tidepool API
-      </button>
+      <div className="flex flex-wrap gap-2">
+        <button onClick={sync} className="rounded bg-slate-800 px-3 py-1 text-sm">
+          Or pull from Tidepool API
+        </button>
+        <button onClick={detectPump} className="rounded bg-slate-800 px-3 py-1 text-sm">
+          Detect pump (experimental)
+        </button>
+      </div>
 
       {msg && <p className="text-sm text-amber-300">{msg}</p>}
 
