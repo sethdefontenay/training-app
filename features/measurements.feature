@@ -36,6 +36,11 @@ Feature: Body measurements
     When I view the waist trend
     Then I see waist plotted over time
 
+  Scenario: Open a past day's full detail
+    Given I recorded waist_cm 96 on 2026-05-25
+    When I open the detail for 2026-05-25
+    Then the detail shows waist_cm 96
+
   Scenario: Edit a measurement
     Given I recorded weight_kg 94 on 2026-05-25
     When I correct it to 93.5

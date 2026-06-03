@@ -91,6 +91,18 @@ def _trend_present(context: dict[str, object]) -> None:
     assert len([r for r in trend if r["waist_cm"] is not None]) >= 2
 
 
+@when(parsers.parse("I open the detail for {d}"))
+def _open_detail(bdd_client: TestClient, context: dict[str, object], d: str) -> None:
+    context["detail"] = bdd_client.get(f"{_M}/{d}").json()
+
+
+@then(parsers.parse("the detail shows waist_cm {value}"))
+def _detail_shows(context: dict[str, object], value: str) -> None:
+    detail = context["detail"]
+    assert isinstance(detail, dict)
+    assert detail["waist_cm"] == float(value)
+
+
 @when(parsers.parse("I correct it to {value}"))
 def _correct(bdd_client: TestClient, context: dict[str, object], value: str) -> None:
     last = context["last"]
