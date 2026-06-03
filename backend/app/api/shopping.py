@@ -7,6 +7,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 
 from app.api.deps import CurrentUser, SessionDep
+from app.clock import local_today
 from app.models import ShoppingItem, ShoppingList
 from app.schemas.shopping import CheckItem, ShoppingItemOut, ShoppingListOut
 from app.services.shopping import current_plan, generate_for_plan
@@ -53,7 +54,7 @@ async def get_shopping(session: SessionDep, user: CurrentUser) -> ShoppingListOu
         plan = await current_plan(session)
         if plan is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No active plan")
-        sl = await generate_for_plan(session, plan, _week_start(date.today()))
+        sl = await generate_for_plan(session, plan, _week_start(local_today()))
         sl = await session.scalar(
             select(ShoppingList)
             .where(ShoppingList.id == sl.id)
@@ -83,7 +84,7 @@ async def regenerate(session: SessionDep, user: CurrentUser) -> ShoppingListOut:
     plan = await current_plan(session)
     if plan is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No active plan")
-    created = await generate_for_plan(session, plan, _week_start(date.today()))
+    created = await generate_for_plan(session, plan, _week_start(local_today()))
     reloaded: ShoppingList | None = await session.scalar(
         select(ShoppingList)
         .where(ShoppingList.id == created.id)

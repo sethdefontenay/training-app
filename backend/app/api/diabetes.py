@@ -7,6 +7,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 
 from app.api.deps import CurrentUser, SessionDep
+from app.clock import local_today
 from app.integrations.health import IntegrationNotConfigured
 from app.integrations.tidepool import (
     TidepoolClient,
@@ -38,7 +39,7 @@ async def sync(
     days: int = 7,
     before: date | None = None,
 ) -> dict[str, object]:
-    end = before or date.today()
+    end = before or local_today()
     start = end - timedelta(days=days - 1)
     try:
         result = await sync_diabetes(session, provider, start, end)
@@ -80,7 +81,7 @@ async def upload(
 async def record(
     session: SessionDep, user: CurrentUser, days: int = 7, before: date | None = None
 ) -> dict[str, object]:
-    end = before or date.today()
+    end = before or local_today()
     start = end - timedelta(days=days - 1)
     insulin = await insulin_count(session, start, end)
     return {

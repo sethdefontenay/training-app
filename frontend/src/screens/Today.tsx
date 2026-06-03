@@ -32,6 +32,18 @@ export default function Today() {
   const load = () => get<DailyView>(`/daily/${day}`).then(setView);
   useEffect(() => {
     load();
+    // Low-overhead freshness: pull steps/sleep from Google Health in the
+    // background on open (throttled to every 10 min), then refresh the view.
+    // Silently ignore failures (e.g. Google Health not connected).
+    const KEY = "lastHealthSync";
+    const since = Date.now() - Number(localStorage.getItem(KEY) ?? 0);
+    if (since > 10 * 60 * 1000) {
+      localStorage.setItem(KEY, String(Date.now()));
+      post("/sync/steps-sleep")
+        .then(() => load())
+        .catch(() => {});
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   if (!view) return <p className="text-slate-400">Loading…</p>;

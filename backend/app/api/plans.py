@@ -1,6 +1,5 @@
 """Plan endpoints: AI ingest (propose), review-gated commit, list/current."""
 
-from datetime import date
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -8,6 +7,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 
 from app.api.deps import CurrentUser, SessionDep
+from app.clock import local_today
 from app.integrations.health import IntegrationNotConfigured
 from app.integrations.ingest import (
     ClaudeIngestionAgent,
@@ -148,7 +148,7 @@ async def current_detail(session: SessionDep, user: CurrentUser) -> dict[str, ob
         "source": plan.source,
         "phase": plan.phase,
         "start_date": plan.start_date.isoformat(),
-        "days_since_start": (date.today() - plan.start_date).days,
+        "days_since_start": (local_today() - plan.start_date).days,
         "targets": {
             "steps_target": plan.steps_target,
             "water_min_l": plan.water_min_l,

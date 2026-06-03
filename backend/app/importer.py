@@ -15,6 +15,7 @@ import yaml
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.clock import local_today
 from app.models import (
     Exercise,
     Meal,
@@ -208,7 +209,7 @@ async def _import_plan(session: AsyncSession, vault: Path, summary: ImportSummar
     if current is not None:
         current.is_current = False
 
-    start = _extract_date(source or "", date.today())
+    start = _extract_date(source or "", local_today())
     plan = Plan(start_date=start, is_current=True, source=source, phase=phase)
     _apply_targets(plan, plan_dir)
     session.add(plan)

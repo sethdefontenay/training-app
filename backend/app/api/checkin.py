@@ -1,6 +1,5 @@
 """Weekly PT check-in endpoints: start, assemble, reflections, photos, finish."""
 
-from datetime import date
 from pathlib import Path
 from typing import Annotated
 
@@ -9,6 +8,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 
 from app.api.deps import CurrentUser, SessionDep
+from app.clock import local_today
 from app.config import get_settings
 from app.models import CheckIn, CheckInPhoto
 from app.schemas.checkin import (
@@ -79,7 +79,7 @@ async def _get(session: SessionDep, check_in_id: int) -> CheckIn:
 
 @router.post("", response_model=CheckInView, status_code=status.HTTP_201_CREATED)
 async def start_check_in(body: CheckInStart, session: SessionDep, user: CurrentUser) -> CheckInView:
-    started = body.started_on or date.today()
+    started = body.started_on or local_today()
     win_start, win_end = window_for(started)
     ci = CheckIn(started_on=started, window_start=win_start, window_end=win_end)
     session.add(ci)
