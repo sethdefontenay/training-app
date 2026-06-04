@@ -43,6 +43,10 @@ class Settings(BaseSettings):
     anthropic_api_key: str | None = None
     assistant_model: str = "claude-opus-4-8"
 
+    # Set to enable the MCP server at /mcp for external clients (Claude Desktop/Code/
+    # claude.ai). Every /mcp request must send `Authorization: Bearer <this>`.
+    mcp_token: str | None = None
+
     @field_validator("database_url")
     @classmethod
     def _ensure_asyncpg(cls, v: str) -> str:

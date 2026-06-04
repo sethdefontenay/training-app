@@ -107,3 +107,27 @@ async def test_chat_503_without_api_key(auth_client: AsyncClient, monkeypatch) -
         "/api/v1/assistant/chat", json={"messages": [{"role": "user", "content": "hi"}]}
     )
     assert resp.status_code == 503
+
+
+# --- MCP server (tool layer; transport not exercised here) ---
+
+
+async def test_mcp_tool_defs_match_registry() -> None:
+    from app.assistant.mcp_server import mcp_tool_defs
+    from app.assistant.tools import TOOLS
+
+    defs = mcp_tool_defs()
+    assert {d.name for d in defs} == {t.name for t in TOOLS}
+    assert all(d.inputSchema.get("type") == "object" for d in defs)
+
+
+async def test_mcp_call_tool_dispatches(session: AsyncSession) -> None:
+    import json
+
+    from app.assistant.mcp_server import call_mcp_tool
+
+    # call_mcp_tool opens its own session via SessionLocal; just assert it returns JSON.
+    out = json.loads(await call_mcp_tool("get_workout_history", {}))
+    assert isinstance(out, list)
+    bad = json.loads(await call_mcp_tool("nope", {}))
+    assert "error" in bad

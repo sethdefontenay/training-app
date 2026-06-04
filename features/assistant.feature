@@ -32,3 +32,20 @@ Feature: In-app assistant
     Given no Anthropic API key is configured
     When I send a message to the assistant
     Then I am told the assistant isn't configured
+
+  Scenario: Find exercise technique videos via web search
+    When I ask the assistant for technique help on an exercise
+    Then it searches the web and returns links to short instructional videos
+
+  # The same tool registry is exposed over an authenticated MCP server (Streamable HTTP)
+  # for external clients, gated behind MCP_TOKEN.
+
+  Scenario: The MCP server requires the bearer token
+    Given the MCP server is enabled with a token
+    When a client connects without the token
+    Then the request is rejected as unauthorized
+
+  Scenario: The MCP server exposes the same tools
+    Given the MCP server is enabled with a token
+    When an authorised client lists tools
+    Then it sees the same read and write tools the in-app assistant uses

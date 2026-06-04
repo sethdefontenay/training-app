@@ -35,7 +35,14 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     # First-deploy convenience: create/refresh the single user from env vars.
     if settings.seed_email and settings.seed_password:
         await create_user(settings.seed_email, settings.seed_password)
-    yield
+    if settings.mcp_token:
+        # Keep the MCP Streamable-HTTP session manager running for the app's lifetime.
+        from app.assistant.mcp_server import session_manager
+
+        async with session_manager().run():
+            yield
+    else:
+        yield
 
 
 app = FastAPI(
@@ -76,6 +83,15 @@ api_v1.include_router(imports.router)
 api_v1.include_router(assistant.router)
 
 app.include_router(api_v1)
+
+# Expose the assistant's tools as an authed MCP server (Streamable HTTP) for external
+# clients. Mounted BEFORE the SPA catch-all so /mcp isn't swallowed; gated on MCP_TOKEN.
+if settings.mcp_token:
+    from starlette.routing import Mount
+
+    from app.assistant.mcp_server import bearer_guard, mcp_asgi
+
+    app.router.routes.append(Mount("/mcp", app=bearer_guard(mcp_asgi, settings.mcp_token)))
 
 # Serve the built PWA (single-service prod deploy) if a build was copied in.
 # Mounted last so it never shadows /health, /docs, or /api/v1/*. Skipped in local dev

@@ -35,7 +35,14 @@ dates to the tools.
 - Be concise and direct. Lead with the answer.
 - Before writing/modifying data, make sure you have the details you need; afterwards, state \
 exactly what you changed. If a request is ambiguous, ask rather than guess.
-- For glucose, note that insulin-on-board is a model estimate, not pump-reported."""
+- For glucose, note that insulin-on-board is a model estimate, not pump-reported.
+- You can search the web. When asked for exercise technique help, search for SHORT \
+instructional videos (prefer reputable YouTube clips, roughly 1-3 min) and give the \
+exercise name with the direct link. Use the web for current external info; use the data \
+tools for anything about Seth's own logs."""
+
+# Anthropic server-side web search tool (executed on Anthropic's side).
+_WEB_SEARCH = {"type": "web_search_20260209", "name": "web_search", "max_uses": 5}
 
 
 class AssistantNotConfigured(RuntimeError):
@@ -55,7 +62,7 @@ async def run_chat(session: AsyncSession, messages: list[dict[str, object]]) -> 
         f"(time {now:%H:%M}) in Seth's timezone, {settings.timezone}. "
         "Compute relative dates from this."
     )
-    tools = anthropic_tools()
+    tools = [*anthropic_tools(), _WEB_SEARCH]
     convo: list[dict[str, object]] = list(messages)
     used: list[str] = []
 
@@ -67,6 +74,10 @@ async def run_chat(session: AsyncSession, messages: list[dict[str, object]]) -> 
             tools=tools,  # type: ignore[arg-type]
             messages=convo,  # type: ignore[arg-type]
         )
+        if resp.stop_reason == "pause_turn":
+            # Long server-tool turn (e.g. web search) — resend to let it continue.
+            convo.append({"role": "assistant", "content": [b.model_dump() for b in resp.content]})
+            continue
         if resp.stop_reason != "tool_use":
             text = "".join(b.text for b in resp.content if b.type == "text")
             return ChatResult(reply=text, tools_used=used)
