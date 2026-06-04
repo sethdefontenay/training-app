@@ -86,8 +86,8 @@ function Row({
           onClick={async () => {
             await onLog(ex.slug, reps, weight);
             setDone((d) => d + 1);
-            setReps("");
-            setWeight("");
+            // Keep reps/weight in the inputs — most sets repeat the same values,
+            // so don't make Seth re-type them every set.
           }}
           className="rounded bg-emerald-600 px-3 py-1 text-sm"
         >
