@@ -72,3 +72,42 @@ Feature: Diabetes data via Tidepool
     Given I uploaded my pump to Tidepool after starting the check-in
     When I refresh the diabetes data
     Then the newly uploaded pump data is pulled and included
+
+  # --- Graphing the record (1 day / 1 week / 1 month), in my local timezone ---
+
+  Scenario: The daily view plots my glucose trace over the day
+    Given glucose readings are stored for today
+    When I open the diabetes graph for the day
+    Then I see my glucose plotted against the time of day in my local timezone
+
+  Scenario: Insulin on board is overlaid on the daily view
+    Given I took a bolus today
+    When I open the diabetes graph for the day
+    Then an insulin-on-board line is overlaid, peaking after the bolus and decaying to zero
+    And the IOB is shown as a model estimate, not a pump-reported figure
+
+  Scenario: Meals are marked on the daily view at the times I logged them
+    Given I checked off meals on my daily task list today
+    When I open the diabetes graph for the day
+    Then each meal is marked at the time I checked it off, with its carbs
+
+  Scenario: Workouts are marked on the daily view from my logged sets
+    Given I logged workout sets today
+    When I open the diabetes graph for the day
+    Then the workout is marked across the span of time I was logging sets
+
+  Scenario: The week view shows my average BG per day
+    Given glucose readings are stored across the last week
+    When I open the diabetes graph for the week
+    Then I see one average BG point per day with the in-range band shaded
+
+  Scenario: The month view shows my average BG per day over the month
+    Given glucose readings are stored across the last month
+    When I open the diabetes graph for the month
+    Then I see the daily average BG trend across the month
+
+  Scenario: A day with no glucose is shown honestly, never faked
+    Given there are no glucose readings for the chosen day
+    When I open the diabetes graph for the day
+    Then no glucose trace is drawn
+    And I am prompted to pull from Tidepool

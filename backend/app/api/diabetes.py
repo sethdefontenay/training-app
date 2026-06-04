@@ -2,12 +2,14 @@
 
 import json
 from datetime import date, timedelta
-from typing import Annotated
+from typing import Annotated, Literal
+from zoneinfo import ZoneInfo
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
 
 from app.api.deps import CurrentUser, SessionDep
 from app.clock import local_today
+from app.config import get_settings
 from app.integrations.health import IntegrationNotConfigured
 from app.integrations.tidepool import (
     TidepoolClient,
@@ -18,6 +20,7 @@ from app.integrations.tidepool import (
     store_points,
     sync_diabetes,
 )
+from app.services.diabetes_graph import daily_series, trend_series
 from app.services.settings import tidepool_config
 
 router = APIRouter(prefix="/diabetes", tags=["diabetes"])
@@ -75,6 +78,24 @@ async def upload(
     glucose, insulin = parse_tidepool_export(data)
     g_added, i_added = await store_points(session, glucose, insulin)
     return {"glucose_added": g_added, "insulin_added": i_added}
+
+
+@router.get("/graph")
+async def graph(
+    session: SessionDep,
+    user: CurrentUser,
+    range: Literal["day", "week", "month"] = "day",
+    date_: Annotated[date | None, Query(alias="date")] = None,
+) -> dict[str, object]:
+    """Chart data: daily BG trace + IOB + meal/workout overlays (day), or
+    per-day average BG trend (week/month). Bucketed in the user's timezone."""
+    tz = ZoneInfo(get_settings().timezone)
+    if range == "day":
+        return await daily_series(session, date_ or local_today(), tz)
+    days = 7 if range == "week" else 30
+    end = date_ or local_today()
+    start = end - timedelta(days=days - 1)
+    return await trend_series(session, start, end, tz)
 
 
 @router.get("/record")
