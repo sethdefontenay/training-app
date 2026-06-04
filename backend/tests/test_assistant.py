@@ -84,6 +84,7 @@ async def test_agent_loop_calls_tool_then_answers(session: AsyncSession, monkeyp
     class _S:
         anthropic_api_key = "test-key"
         assistant_model = "claude-opus-4-8"
+        timezone = "Pacific/Auckland"
 
     monkeypatch.setattr(agent_mod, "get_settings", lambda: _S())
     out = await run_chat(session, [{"role": "user", "content": "what's on today?"}])

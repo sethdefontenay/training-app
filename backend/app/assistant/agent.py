@@ -7,6 +7,7 @@ import anthropic
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.assistant.tools import TOOLS_BY_NAME, anthropic_tools
+from app.clock import local_now
 from app.config import get_settings
 
 MAX_TURNS = 10
@@ -28,7 +29,9 @@ wellbeing scores and record measurements.
 Rules:
 - Use the tools to get real data before answering. Never invent numbers; if a tool returns \
 nothing, say so plainly.
-- All dates are in Seth's local timezone. "Today" means his today.
+- All dates are in Seth's local timezone. Resolve relative dates ("today", "tomorrow", \
+"yesterday", "this week") from the current date given below, and pass explicit YYYY-MM-DD \
+dates to the tools.
 - Be concise and direct. Lead with the answer.
 - Before writing/modifying data, make sure you have the details you need; afterwards, state \
 exactly what you changed. If a request is ambiguous, ask rather than guess.
@@ -46,6 +49,12 @@ async def run_chat(session: AsyncSession, messages: list[dict[str, object]]) -> 
         raise AssistantNotConfigured("Assistant not configured — set ANTHROPIC_API_KEY.")
 
     client = anthropic.AsyncAnthropic(api_key=settings.anthropic_api_key)
+    now = local_now()
+    system = (
+        f"{_SYSTEM}\n\nThe current date is {now:%A, %Y-%m-%d} "
+        f"(time {now:%H:%M}) in Seth's timezone, {settings.timezone}. "
+        "Compute relative dates from this."
+    )
     tools = anthropic_tools()
     convo: list[dict[str, object]] = list(messages)
     used: list[str] = []
@@ -54,7 +63,7 @@ async def run_chat(session: AsyncSession, messages: list[dict[str, object]]) -> 
         resp = await client.messages.create(
             model=settings.assistant_model,
             max_tokens=MAX_TOKENS,
-            system=_SYSTEM,
+            system=system,
             tools=tools,  # type: ignore[arg-type]
             messages=convo,  # type: ignore[arg-type]
         )
