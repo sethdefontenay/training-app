@@ -56,9 +56,18 @@ def _parse_sleep(body: dict[str, Any]) -> SleepRecord | None:
     end_local = end_utc + timedelta(seconds=end_off)
 
     totals = {"AWAKE": 0.0, "LIGHT": 0.0, "DEEP": 0.0, "REM": 0.0, "OUT_OF_BED": 0.0}
+    segments: list[dict[str, str]] = []
     for stage in main["sleep"].get("stages", []):
-        mins = (_parse_iso(stage["endTime"]) - _parse_iso(stage["startTime"])).total_seconds() / 60
-        totals[stage.get("type", "")] = totals.get(stage.get("type", ""), 0.0) + mins
+        kind = stage.get("type", "")
+        s_utc, e_utc = _parse_iso(stage["startTime"]), _parse_iso(stage["endTime"])
+        totals[kind] = totals.get(kind, 0.0) + (e_utc - s_utc).total_seconds() / 60
+        # Localise with the session offset (constant through the night) for the timeline.
+        # Store as naive local wall-clock ISO (no misleading UTC suffix).
+        s_local = (s_utc + timedelta(seconds=start_off)).replace(tzinfo=None)
+        e_local = (e_utc + timedelta(seconds=start_off)).replace(tzinfo=None)
+        segments.append(
+            {"type": kind.lower(), "start": s_local.isoformat(), "end": e_local.isoformat()}
+        )
 
     in_bed = (end_utc - start_utc).total_seconds() / 60
     asleep = totals["LIGHT"] + totals["DEEP"] + totals["REM"]
@@ -66,9 +75,15 @@ def _parse_sleep(body: dict[str, Any]) -> SleepRecord | None:
     return SleepRecord(
         date=end_local.date(),
         asleep_min=round(asleep, 1),
+        in_bed_min=round(in_bed, 1),
+        awake_min=round(totals["AWAKE"] + totals["OUT_OF_BED"], 1),
+        light_min=round(totals["LIGHT"], 1),
+        deep_min=round(totals["DEEP"], 1),
+        rem_min=round(totals["REM"], 1),
         efficiency=efficiency,
         bedtime=start_local.strftime("%H:%M"),
         wake_time=end_local.strftime("%H:%M"),
+        stages=segments or None,
     )
 
 
@@ -87,9 +102,15 @@ class StepRecord:
 class SleepRecord:
     date: date
     asleep_min: float | None = None
+    in_bed_min: float | None = None
+    awake_min: float | None = None
+    light_min: float | None = None
+    deep_min: float | None = None
+    rem_min: float | None = None
     efficiency: float | None = None
     bedtime: str | None = None
     wake_time: str | None = None
+    stages: list[dict[str, str]] | None = None
 
 
 class HealthProvider(Protocol):
@@ -202,9 +223,15 @@ async def sync_steps_sleep(
             srow = SleepNight(date=night.date)
             session.add(srow)
         srow.asleep_min = night.asleep_min
+        srow.in_bed_min = night.in_bed_min
+        srow.awake_min = night.awake_min
+        srow.light_min = night.light_min
+        srow.deep_min = night.deep_min
+        srow.rem_min = night.rem_min
         srow.efficiency = night.efficiency
         srow.bedtime = night.bedtime
         srow.wake_time = night.wake_time
+        srow.stages = night.stages
         result.sleep_synced += 1
 
     await session.commit()

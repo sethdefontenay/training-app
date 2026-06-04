@@ -2,7 +2,7 @@
 
 from datetime import date, datetime
 
-from sqlalchemy import Date, DateTime
+from sqlalchemy import JSON, Date, DateTime
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.base import Base, TimestampMixin
@@ -35,6 +35,8 @@ class SleepNight(Base, TimestampMixin):
     deep_min: Mapped[float | None] = mapped_column(default=None)
     rem_min: Mapped[float | None] = mapped_column(default=None)
     efficiency: Mapped[float | None] = mapped_column(default=None)
+    # Per-stage segments for the hypnogram: [{"type","start","end"}] in local ISO time.
+    stages: Mapped[list[dict[str, str]] | None] = mapped_column(JSON, default=None)
     sessions: Mapped[int | None] = mapped_column(default=None)
     device: Mapped[str | None] = mapped_column(default=None)
     source: Mapped[str] = mapped_column(default="google-health")

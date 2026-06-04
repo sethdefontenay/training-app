@@ -17,6 +17,7 @@ from app.api import (
     imports,
     plans,
     shopping,
+    sleep,
     sync,
     tracking,
     workouts,
@@ -81,6 +82,7 @@ api_v1.include_router(plans.router)
 api_v1.include_router(settings_api.router)
 api_v1.include_router(imports.router)
 api_v1.include_router(assistant.router)
+api_v1.include_router(sleep.router)
 
 app.include_router(api_v1)
 

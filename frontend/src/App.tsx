@@ -17,6 +17,7 @@ import WorkoutHistory from "./screens/WorkoutHistory";
 // app doesn't need. Load them only when their route is opened (shared chunk).
 const Diabetes = lazy(() => import("./screens/Diabetes"));
 const ExerciseProgress = lazy(() => import("./screens/ExerciseProgress"));
+const Sleep = lazy(() => import("./screens/Sleep"));
 
 export default function App() {
   const { isAuthed } = useAuth();
@@ -44,6 +45,14 @@ export default function App() {
           element={
             <Suspense fallback={<p className="text-slate-400">Loading…</p>}>
               <ExerciseProgress />
+            </Suspense>
+          }
+        />
+        <Route
+          path="/sleep"
+          element={
+            <Suspense fallback={<p className="text-slate-400">Loading…</p>}>
+              <Sleep />
             </Suspense>
           }
         />
