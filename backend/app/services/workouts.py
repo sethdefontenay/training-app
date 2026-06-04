@@ -47,6 +47,40 @@ NO_HISTORY = "—"
 BODYWEIGHT = "BW"
 
 
+async def list_sessions(session: AsyncSession) -> list[dict[str, object]]:
+    """Logged workout sessions (those with sets), most recent first, grouped by exercise."""
+    from sqlalchemy.orm import selectinload
+
+    rows = (
+        await session.scalars(
+            select(Session)
+            .options(selectinload(Session.sets).selectinload(SetEntry.exercise))
+            .order_by(Session.date.desc())
+        )
+    ).all()
+    out: list[dict[str, object]] = []
+    for s in rows:
+        if not s.sets:
+            continue  # rest/empty days aren't workouts
+        by_ex: dict[tuple[str, str], list[str]] = {}
+        for e in sorted(s.sets, key=lambda x: (x.exercise_id, x.set_index)):
+            by_ex.setdefault((e.exercise.slug, e.exercise.name), []).append(
+                set_display(e.weight, e.reps)
+            )
+        out.append(
+            {
+                "id": s.id,
+                "date": s.date,
+                "weekday": s.weekday,
+                "exercises": [
+                    {"slug": slug, "name": name, "sets": sets}
+                    for (slug, name), sets in by_ex.items()
+                ],
+            }
+        )
+    return out
+
+
 async def progress_series(
     session: AsyncSession, slug: str
 ) -> tuple[str, str, list[dict[str, object]]] | None:

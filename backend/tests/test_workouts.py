@@ -183,3 +183,21 @@ async def test_progress_bodyweight_uses_reps(
 
 async def test_progress_unknown_exercise_404(auth_client: AsyncClient) -> None:
     assert (await auth_client.get("/api/v1/exercises/nope/progress")).status_code == 404
+
+
+# --- workout history list ---
+
+
+async def test_list_sessions_history(auth_client: AsyncClient, session: AsyncSession) -> None:
+    await _seed_session(session, "leg-press-machine", date(2026, 5, 18), [("40", "15")])
+    await _seed_session(session, "lat-pulldown", date(2026, 5, 25), [("30", "12"), ("30", "10")])
+    # an empty (rest) session should be excluded
+    s = Session(date=date(2026, 5, 26), weekday="Tuesday")
+    session.add(s)
+    await session.commit()
+
+    body = (await auth_client.get("/api/v1/sessions")).json()
+    assert [s["date"] for s in body] == ["2026-05-25", "2026-05-18"]  # newest first, rest day gone
+    latest = body[0]
+    assert latest["exercises"][0]["name"] == "Lat Pulldown"
+    assert latest["exercises"][0]["sets"] == ["30 kg × 12", "30 kg × 10"]

@@ -14,6 +14,7 @@ from app.schemas.workouts import (
     ProgressPoint,
     SessionCreate,
     SessionRead,
+    SessionSummary,
     SetCreate,
     SetRead,
     SetUpdate,
@@ -21,6 +22,7 @@ from app.schemas.workouts import (
 from app.services.workouts import (
     get_or_create_exercise,
     last_week_display,
+    list_sessions,
     progress_series,
     set_display,
 )
@@ -52,6 +54,11 @@ async def create_session(
     await session.commit()
     await session.refresh(s)
     return SessionRead(id=s.id, date=s.date, sets=[])
+
+
+@router.get("/sessions", response_model=list[SessionSummary])
+async def list_workout_sessions(session: SessionDep, user: CurrentUser) -> list[SessionSummary]:
+    return [SessionSummary(**s) for s in await list_sessions(session)]
 
 
 @router.get("/sessions/{session_id}", response_model=SessionRead)

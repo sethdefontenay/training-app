@@ -53,3 +53,16 @@ class ExerciseProgress(BaseModel):
     name: str
     metric: str  # "weight" | "reps" — what the series should be plotted as
     points: list[ProgressPoint]
+
+
+class ExerciseSets(BaseModel):
+    slug: str
+    name: str
+    sets: list[str]  # display strings, e.g. "40 kg × 15"
+
+
+class SessionSummary(BaseModel):
+    id: int
+    date: date
+    weekday: str | None
+    exercises: list[ExerciseSets]

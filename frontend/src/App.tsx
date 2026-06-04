@@ -11,6 +11,7 @@ import Settings from "./screens/Settings";
 import Shopping from "./screens/Shopping";
 import Today from "./screens/Today";
 import Workout from "./screens/Workout";
+import WorkoutHistory from "./screens/WorkoutHistory";
 
 // Code-split: these screens pull in Recharts (~350 KB), which the rest of the
 // app doesn't need. Load them only when their route is opened (shared chunk).
@@ -26,6 +27,7 @@ export default function App() {
         <Route path="/" element={<Home />} />
         <Route path="/today" element={<Today />} />
         <Route path="/workout" element={<Workout />} />
+        <Route path="/history" element={<WorkoutHistory />} />
         <Route path="/measurements" element={<Measurements />} />
         <Route path="/check-in" element={<CheckIn />} />
         <Route path="/shopping" element={<Shopping />} />

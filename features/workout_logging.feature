@@ -76,3 +76,9 @@ Feature: Workout logging
     And I have already logged 45 kg earlier in today's session
     When I view the "last week" column for "Leg Press Machine"
     Then it still shows "40 kg"
+
+  Scenario: Workout history lists past sessions, newest first
+    Given I logged workouts on several days
+    When I open my workout history
+    Then I see each logged day with its exercises and sets, most recent first
+    And days with no logged sets are not shown
