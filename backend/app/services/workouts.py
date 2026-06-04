@@ -47,6 +47,55 @@ NO_HISTORY = "—"
 BODYWEIGHT = "BW"
 
 
+async def progress_series(
+    session: AsyncSession, slug: str
+) -> tuple[str, str, list[dict[str, object]]] | None:
+    """For an exercise, the top set per workout day over time (oldest → newest).
+
+    Returns (name, metric, points). 'metric' is "weight" if any day has a weighted set,
+    else "reps" (bodyweight progression). Each point carries the heaviest weight and the
+    reps at that set (ties on weight broken by most reps), matching the locked rule.
+    """
+    ex = await session.scalar(select(Exercise).where(Exercise.slug == slug))
+    if ex is None:
+        return None
+    rows = (
+        await session.execute(
+            select(Session.date, SetEntry.weight, SetEntry.reps)
+            .join(SetEntry, SetEntry.session_id == Session.id)
+            .where(SetEntry.exercise_id == ex.id)
+            .order_by(Session.date)
+        )
+    ).all()
+
+    by_date: dict[date, list[tuple[str | None, str | None]]] = {}
+    for day, weight, reps in rows:
+        by_date.setdefault(day, []).append((weight, reps))
+
+    points: list[dict[str, object]] = []
+    any_weight = False
+    for day in sorted(by_date):
+        sets = by_date[day]
+        # Top set: max weight, ties broken by most reps.
+        best = max(sets, key=lambda wr: (_to_float(wr[0]) or -1.0, _reps_int(wr[1]) or -1))
+        weight = _to_float(best[0])
+        reps = _reps_int(best[1])
+        if weight is not None:
+            any_weight = True
+            display = set_display(best[0], best[1])
+        else:
+            best_reps = max((_reps_int(r) or 0 for _, r in sets), default=0)
+            reps = best_reps or None
+            display = f"{best_reps} reps" if best_reps else BODYWEIGHT
+        points.append({"date": day, "weight": weight, "reps": reps, "display": display})
+
+    return ex.name, ("weight" if any_weight else "reps"), points
+
+
+def _reps_int(value: str | None) -> int | None:
+    return int(value) if value and value.isdigit() else None
+
+
 def _format_weight(weight: float) -> str:
     text = str(int(weight)) if weight == int(weight) else f"{weight:g}"
     return f"{text} kg"

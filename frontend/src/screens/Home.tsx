@@ -6,6 +6,7 @@ const AREAS = [
   { to: "/check-in", label: "Weekly check-in", hint: "for your PT" },
   { to: "/measurements", label: "Measurements", hint: "" },
   { to: "/diabetes", label: "Diabetes record", hint: "glucose & insulin" },
+  { to: "/exercises", label: "Exercise progress", hint: "weight over time by workout day" },
   { to: "/plan", label: "Current plan", hint: "" },
   { to: "/settings", label: "Settings", hint: "connect Google Health" },
 ];

@@ -9,14 +9,21 @@ from sqlalchemy.orm import selectinload
 from app.api.deps import CurrentUser, SessionDep
 from app.models import Session, SetEntry
 from app.schemas.workouts import (
+    ExerciseProgress,
     LastWeek,
+    ProgressPoint,
     SessionCreate,
     SessionRead,
     SetCreate,
     SetRead,
     SetUpdate,
 )
-from app.services.workouts import get_or_create_exercise, last_week_display, set_display
+from app.services.workouts import (
+    get_or_create_exercise,
+    last_week_display,
+    progress_series,
+    set_display,
+)
 
 router = APIRouter(tags=["workouts"])
 
@@ -126,3 +133,17 @@ async def delete_set(set_id: int, session: SessionDep, user: CurrentUser) -> Non
 @router.get("/exercises/{slug}/last-week", response_model=LastWeek)
 async def last_week(slug: str, before: date, session: SessionDep, user: CurrentUser) -> LastWeek:
     return LastWeek(display=await last_week_display(session, slug, before))
+
+
+@router.get("/exercises/{slug}/progress", response_model=ExerciseProgress)
+async def exercise_progress(slug: str, session: SessionDep, user: CurrentUser) -> ExerciseProgress:
+    result = await progress_series(session, slug)
+    if result is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Exercise not found")
+    name, metric, points = result
+    return ExerciseProgress(
+        slug=slug,
+        name=name,
+        metric=metric,
+        points=[ProgressPoint(**p) for p in points],
+    )

@@ -134,3 +134,52 @@ async def test_last_week_excludes_todays_own_sets(
     await _seed_session(session, "leg-press-machine", date(2026, 5, 25), [("45", "15")])
     # before=today (2026-05-25) excludes today's own sets -> shows the prior session
     assert await _last_week(auth_client, "leg-press-machine", "2026-05-25") == "40 kg"
+
+
+# --- exercise progress over time ---
+
+
+async def test_progress_series_weight_over_time(
+    auth_client: AsyncClient, session: AsyncSession
+) -> None:
+    await _seed_session(
+        session, "leg-press-machine", date(2026, 5, 11), [("40", "15"), ("40", "12")]
+    )
+    await _seed_session(session, "leg-press-machine", date(2026, 5, 18), [("45", "15")])
+    await _seed_session(
+        session, "leg-press-machine", date(2026, 5, 25), [("50", "10"), ("45", "15")]
+    )
+    body = (await auth_client.get("/api/v1/exercises/leg-press-machine/progress")).json()
+    assert body["metric"] == "weight"
+    assert [(p["date"], p["weight"]) for p in body["points"]] == [
+        ("2026-05-11", 40.0),
+        ("2026-05-18", 45.0),
+        ("2026-05-25", 50.0),  # heaviest set that day
+    ]
+
+
+async def test_progress_ties_broken_by_reps(
+    auth_client: AsyncClient, session: AsyncSession
+) -> None:
+    await _seed_session(
+        session, "leg-press-machine", date(2026, 5, 25), [("50", "8"), ("50", "12")]
+    )
+    body = (await auth_client.get("/api/v1/exercises/leg-press-machine/progress")).json()
+    assert body["points"][0]["reps"] == 12  # tie on 50 kg -> most reps
+
+
+async def test_progress_bodyweight_uses_reps(
+    auth_client: AsyncClient, session: AsyncSession
+) -> None:
+    await _seed_session(session, "crunches", date(2026, 5, 18), [(None, "20")])
+    await _seed_session(session, "crunches", date(2026, 5, 25), [(None, "25"), (None, "15")])
+    body = (await auth_client.get("/api/v1/exercises/crunches/progress")).json()
+    assert body["metric"] == "reps"
+    assert [(p["date"], p["reps"]) for p in body["points"]] == [
+        ("2026-05-18", 20),
+        ("2026-05-25", 25),
+    ]
+
+
+async def test_progress_unknown_exercise_404(auth_client: AsyncClient) -> None:
+    assert (await auth_client.get("/api/v1/exercises/nope/progress")).status_code == 404

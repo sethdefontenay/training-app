@@ -12,9 +12,10 @@ import Shopping from "./screens/Shopping";
 import Today from "./screens/Today";
 import Workout from "./screens/Workout";
 
-// Code-split: the diabetes screen pulls in Recharts (~350 KB), which the rest
-// of the app doesn't need. Load it only when that route is opened.
+// Code-split: these screens pull in Recharts (~350 KB), which the rest of the
+// app doesn't need. Load them only when their route is opened (shared chunk).
 const Diabetes = lazy(() => import("./screens/Diabetes"));
+const ExerciseProgress = lazy(() => import("./screens/ExerciseProgress"));
 
 export default function App() {
   const { isAuthed } = useAuth();
@@ -33,6 +34,14 @@ export default function App() {
           element={
             <Suspense fallback={<p className="text-slate-400">Loading…</p>}>
               <Diabetes />
+            </Suspense>
+          }
+        />
+        <Route
+          path="/exercises"
+          element={
+            <Suspense fallback={<p className="text-slate-400">Loading…</p>}>
+              <ExerciseProgress />
             </Suspense>
           }
         />

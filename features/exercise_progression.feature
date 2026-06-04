@@ -30,3 +30,20 @@ Feature: Exercise progression
     Given I have never logged "Hip Thrust"
     When I view the "Hip Thrust" progression
     Then I see that there is no history yet
+
+  # --- Browsing & visualizing progression ---
+
+  Scenario: Exercises are organised by training plan and workout day
+    Given my current plan has training days each with their exercises
+    When I open the exercise progress area
+    Then the exercises are listed grouped under their workout day
+
+  Scenario: Selecting an exercise visualizes its weight over time
+    Given I have logged "Leg Press Machine" across several sessions
+    When I select "Leg Press Machine"
+    Then I see a chart of its top weight per workout day over time
+
+  Scenario: Selecting a bodyweight exercise visualizes reps over time
+    Given I have logged "Crunches" (bodyweight) across several sessions
+    When I select "Crunches"
+    Then I see a chart of its best reps per workout day over time

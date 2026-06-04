@@ -39,3 +39,17 @@ class SessionRead(BaseModel):
 
 class LastWeek(BaseModel):
     display: str
+
+
+class ProgressPoint(BaseModel):
+    date: date
+    weight: float | None  # heaviest weight that day (kg), None for bodyweight days
+    reps: int | None  # reps at the heaviest set (or best reps on bodyweight days)
+    display: str
+
+
+class ExerciseProgress(BaseModel):
+    slug: str
+    name: str
+    metric: str  # "weight" | "reps" — what the series should be plotted as
+    points: list[ProgressPoint]
