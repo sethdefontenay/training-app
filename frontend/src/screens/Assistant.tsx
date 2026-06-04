@@ -3,7 +3,10 @@ import { ApiError, post } from "../api";
 
 type Msg = { role: "user" | "assistant"; content: string };
 
+/** Floating assistant: a bottom-right button that opens a chat drawer. Mounted
+ * once in the Layout so it's available (and keeps its conversation) on every screen. */
 export default function Assistant() {
+  const [open, setOpen] = useState(false);
   const [messages, setMessages] = useState<Msg[]>([]);
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
@@ -35,30 +38,46 @@ export default function Assistant() {
     }
   };
 
+  if (!open) {
+    return (
+      <button
+        onClick={() => setOpen(true)}
+        aria-label="Open assistant"
+        className="fixed bottom-4 right-4 z-50 flex h-12 w-12 items-center justify-center rounded-full bg-sky-600 text-xl shadow-lg hover:bg-sky-500"
+      >
+        💬
+      </button>
+    );
+  }
+
   return (
-    <div className="rounded-xl border border-slate-700 bg-slate-800/60 p-3">
-      <div className="mb-2 flex items-center justify-between">
+    <div className="fixed inset-x-4 bottom-4 z-50 flex max-h-[75vh] flex-col rounded-xl border border-slate-700 bg-slate-800 shadow-2xl sm:inset-x-auto sm:right-4 sm:w-96">
+      <div className="flex items-center justify-between border-b border-slate-700 px-3 py-2">
         <span className="font-semibold">Ask the hub</span>
-        {messages.length > 0 && (
-          <button onClick={() => setMessages([])} className="text-xs text-slate-400 hover:text-slate-200">
-            clear
+        <div className="flex gap-3 text-xs text-slate-400">
+          {messages.length > 0 && (
+            <button onClick={() => setMessages([])} className="hover:text-slate-200">
+              clear
+            </button>
+          )}
+          <button onClick={() => setOpen(false)} aria-label="Close assistant" className="hover:text-slate-200">
+            ✕
           </button>
-        )}
+        </div>
       </div>
 
-      {messages.length === 0 && (
-        <p className="mb-2 text-sm text-slate-400">
-          Ask about your data — e.g. “how’s my glucose this week?”, “what’s my leg-press progress?”,
-          “log 4 sets of leg press at 45kg today”.
-        </p>
-      )}
-
-      <div className="max-h-80 space-y-2 overflow-y-auto">
+      <div className="flex-1 space-y-2 overflow-y-auto p-3">
+        {messages.length === 0 && (
+          <p className="text-sm text-slate-400">
+            Ask about your data — e.g. “how’s my glucose this week?”, “what’s my workout
+            tomorrow?”, “log 4 sets of leg press at 45kg today”.
+          </p>
+        )}
         {messages.map((m, i) => (
           <div
             key={i}
             className={`whitespace-pre-wrap rounded px-3 py-2 text-sm ${
-              m.role === "user" ? "bg-slate-700" : "bg-slate-900/70 border border-slate-700"
+              m.role === "user" ? "bg-slate-700" : "border border-slate-700 bg-slate-900/70"
             }`}
           >
             {m.content}
@@ -69,7 +88,7 @@ export default function Assistant() {
         <div ref={endRef} />
       </div>
 
-      <div className="mt-2 flex gap-2">
+      <div className="flex gap-2 border-t border-slate-700 p-2">
         <input
           value={input}
           onChange={(e) => setInput(e.target.value)}

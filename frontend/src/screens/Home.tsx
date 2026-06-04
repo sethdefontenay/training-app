@@ -1,5 +1,4 @@
 import { Link } from "react-router-dom";
-import Assistant from "./Assistant";
 
 const AREAS = [
   { to: "/today", label: "Today", hint: "activities, meals & wellbeing", primary: true },
@@ -17,7 +16,6 @@ export default function Home() {
   return (
     <div className="space-y-4">
       <h1 className="text-2xl font-bold">Home</h1>
-      <Assistant />
       <div className="grid gap-3">
         {AREAS.map((a) => (
           <Link

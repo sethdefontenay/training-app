@@ -1,5 +1,6 @@
 import { Outlet, useNavigate } from "react-router-dom";
 import { useAuth } from "./auth";
+import Assistant from "./screens/Assistant";
 
 export default function Layout() {
   const nav = useNavigate();
@@ -30,6 +31,7 @@ export default function Layout() {
       <main className="mx-auto max-w-xl p-4">
         <Outlet />
       </main>
+      <Assistant />
     </div>
   );
 }
