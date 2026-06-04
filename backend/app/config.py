@@ -38,6 +38,11 @@ class Settings(BaseSettings):
     seed_email: str | None = None
     seed_password: str | None = None
 
+    # In-app assistant (Claude). Pay-per-token Anthropic API — separate from any
+    # Claude subscription. The bot is disabled until anthropic_api_key is set.
+    anthropic_api_key: str | None = None
+    assistant_model: str = "claude-opus-4-8"
+
     @field_validator("database_url")
     @classmethod
     def _ensure_asyncpg(cls, v: str) -> str:

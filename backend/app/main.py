@@ -9,6 +9,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from app.api import (
+    assistant,
     auth,
     checkin,
     daily,
@@ -72,6 +73,7 @@ api_v1.include_router(diabetes.router)
 api_v1.include_router(plans.router)
 api_v1.include_router(settings_api.router)
 api_v1.include_router(imports.router)
+api_v1.include_router(assistant.router)
 
 app.include_router(api_v1)
 
