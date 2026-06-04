@@ -1,5 +1,9 @@
-import { useRef, useState } from "react";
+import { lazy, Suspense, useRef, useState } from "react";
 import { ApiError, post } from "../api";
+import { youtubeIds } from "../youtube";
+
+// Lazy so react-markdown (~45KB gzip) only loads when the chat is actually used.
+const Markdown = lazy(() => import("../Markdown"));
 
 type Msg = { role: "user" | "assistant"; content: string };
 
@@ -73,16 +77,30 @@ export default function Assistant() {
             tomorrow?”, “log 4 sets of leg press at 45kg today”.
           </p>
         )}
-        {messages.map((m, i) => (
-          <div
-            key={i}
-            className={`whitespace-pre-wrap rounded px-3 py-2 text-sm ${
-              m.role === "user" ? "bg-slate-700" : "border border-slate-700 bg-slate-900/70"
-            }`}
-          >
-            {m.content}
-          </div>
-        ))}
+        {messages.map((m, i) =>
+          m.role === "user" ? (
+            <div key={i} className="whitespace-pre-wrap rounded bg-slate-700 px-3 py-2 text-sm">
+              {m.content}
+            </div>
+          ) : (
+            <div key={i} className="rounded border border-slate-700 bg-slate-900/70 px-3 py-2 text-sm">
+              <Suspense fallback={<div className="whitespace-pre-wrap">{m.content}</div>}>
+                <Markdown>{m.content}</Markdown>
+              </Suspense>
+              {youtubeIds(m.content).map((id) => (
+                <iframe
+                  key={id}
+                  className="mt-2 aspect-video w-full rounded"
+                  src={`https://www.youtube-nocookie.com/embed/${id}`}
+                  title="YouTube video"
+                  loading="lazy"
+                  allow="accelerometer; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                  allowFullScreen
+                />
+              ))}
+            </div>
+          ),
+        )}
         {busy && <div className="px-3 py-2 text-sm text-slate-400">Thinking…</div>}
         {error && <div className="px-3 py-2 text-sm text-amber-300">{error}</div>}
         <div ref={endRef} />
