@@ -121,13 +121,15 @@ async def test_mcp_tool_defs_match_registry() -> None:
     assert all(d.inputSchema.get("type") == "object" for d in defs)
 
 
-async def test_mcp_call_tool_dispatches(session: AsyncSession) -> None:
+async def test_mcp_call_tool_dispatches(sessionmaker, monkeypatch) -> None:
     import json
 
-    from app.assistant.mcp_server import call_mcp_tool
+    from app.assistant import mcp_server
 
-    # call_mcp_tool opens its own session via SessionLocal; just assert it returns JSON.
-    out = json.loads(await call_mcp_tool("get_workout_history", {}))
+    # MCP tools open their own session via SessionLocal (the real Postgres engine).
+    # Point it at the test DB so this doesn't require a live database in CI.
+    monkeypatch.setattr(mcp_server, "SessionLocal", sessionmaker)
+    out = json.loads(await mcp_server.call_mcp_tool("get_workout_history", {}))
     assert isinstance(out, list)
-    bad = json.loads(await call_mcp_tool("nope", {}))
+    bad = json.loads(await mcp_server.call_mcp_tool("nope", {}))
     assert "error" in bad
