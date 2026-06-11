@@ -68,17 +68,33 @@ async def latest_measurement(
 
 
 async def latest_per_metric(session: AsyncSession, on_or_before: date) -> dict[str, float | None]:
-    """Most recent recorded value for each body metric (may be from different dates)."""
-    out: dict[str, float | None] = {}
-    for field in MEASUREMENT_FIELDS:
-        col = getattr(Measurement, field)
-        value = await session.scalar(
-            select(col)
-            .where(Measurement.date <= on_or_before, col.is_not(None))
-            .order_by(Measurement.date.desc())
-            .limit(1)
+    """Most recent recorded value for each body metric (may be from different dates).
+
+    One query (was one per field): pull rows newest-first and keep the first non-null
+    value seen for each field. A single user has few measurement rows, so scanning them
+    is far cheaper than six round-trips.
+    """
+    out: dict[str, float | None] = {f: None for f in MEASUREMENT_FIELDS}
+    remaining = set(MEASUREMENT_FIELDS)
+    rows = (
+        (
+            await session.execute(
+                select(Measurement)
+                .where(Measurement.date <= on_or_before)
+                .order_by(Measurement.date.desc())
+            )
         )
-        out[field] = value
+        .scalars()
+        .all()
+    )
+    for row in rows:
+        for field in tuple(remaining):
+            value = getattr(row, field)
+            if value is not None:
+                out[field] = value
+                remaining.discard(field)
+        if not remaining:
+            break
     return out
 
 

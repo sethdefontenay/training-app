@@ -25,6 +25,8 @@ class ExerciseLine(BaseModel):
     prescribed_weight: str | None
     target_sets: int | None
     completed_sets: int
+    # Heaviest weight from the most recent prior session ("N kg" / "BW" / "—" no history).
+    last_week: str = "—"
 
 
 class WorkoutBlock(BaseModel):

@@ -30,6 +30,7 @@ from app.schemas.daily import (
     WellbeingIn,
     WorkoutBlock,
 )
+from app.services.workouts import NO_HISTORY, last_week_for_exercises
 
 
 async def _mobility_for(session: AsyncSession, day: date) -> list[MobilityItem]:
@@ -85,31 +86,39 @@ async def _workout_block(
     if td is None:
         return None
 
+    prescriptions = sorted(td.prescriptions, key=lambda x: x.order)
+    exercise_ids = [p.exercise_id for p in prescriptions]
+
+    # Completed-set counts for today, all exercises in one grouped query (was N queries).
     sess = await session.scalar(select(Session).where(Session.date == day))
-    lines: list[ExerciseLine] = []
-    for p in sorted(td.prescriptions, key=lambda x: x.order):
-        completed = 0
-        if sess is not None:
-            completed = (
-                await session.scalar(
-                    select(func.count())
-                    .select_from(SetEntry)
-                    .where(
-                        SetEntry.session_id == sess.id,
-                        SetEntry.exercise_id == p.exercise_id,
-                    )
+    completed_by_ex: dict[int, int] = {}
+    if sess is not None:
+        completed_by_ex = dict(
+            (
+                await session.execute(
+                    select(SetEntry.exercise_id, func.count())
+                    .where(SetEntry.session_id == sess.id)
+                    .group_by(SetEntry.exercise_id)
                 )
-            ) or 0
-        lines.append(
-            ExerciseLine(
-                slug=p.exercise.slug,
-                name=p.exercise.name,
-                sets_x_reps=p.sets_x_reps,
-                prescribed_weight=p.prescribed_weight,
-                target_sets=_target_sets(p.sets_x_reps),
-                completed_sets=completed,
-            )
+            ).all()
         )
+
+    # Last-week numbers for every exercise in one query, computed server-side so the
+    # frontend no longer fires a request per exercise (the old N+1 + slow-load bug).
+    last_weeks = await last_week_for_exercises(session, exercise_ids, day)
+
+    lines = [
+        ExerciseLine(
+            slug=p.exercise.slug,
+            name=p.exercise.name,
+            sets_x_reps=p.sets_x_reps,
+            prescribed_weight=p.prescribed_weight,
+            target_sets=_target_sets(p.sets_x_reps),
+            completed_sets=completed_by_ex.get(p.exercise_id, 0),
+            last_week=last_weeks.get(p.exercise_id, NO_HISTORY),
+        )
+        for p in prescriptions
+    ]
     return WorkoutBlock(label=td.label, exercises=lines)
 
 
