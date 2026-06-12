@@ -45,9 +45,13 @@ export default function Today() {
     const since = Date.now() - Number(localStorage.getItem(KEY) ?? 0);
     if (since > 10 * 60 * 1000) {
       localStorage.setItem(KEY, String(Date.now()));
+      const recheck = () => window.dispatchEvent(new Event("gh-status-changed"));
       post("/sync/steps-sleep")
-        .then(() => load())
-        .catch(() => {});
+        .then(() => {
+          load();
+          recheck(); // clears the reconnect banner if the token is healthy again
+        })
+        .catch(recheck); // surfaces the reconnect banner when the token has expired
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);

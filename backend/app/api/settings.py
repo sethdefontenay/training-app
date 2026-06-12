@@ -42,9 +42,12 @@ class GoogleHealthIn(BaseModel):
 
 async def _gh_status(session: SessionDep) -> dict[str, object]:
     cfg = await google_health_config(session)
+    auth_error = await get_setting(session, "google_health.auth_error")
     # Never echo secret values back — only whether each field is set.
     return {
         "connected": all(cfg.values()),
+        # Connected but the refresh token died — the UI shows a one-tap reconnect.
+        "needs_reconnect": all(cfg.values()) and bool(auth_error),
         "fields": [
             {"key": k, "label": label, "set": bool(cfg[k])} for k, label in GOOGLE_HEALTH_FIELDS
         ],
@@ -149,6 +152,8 @@ async def google_health_callback(
     refresh = resp.json().get("refresh_token")
     if refresh:
         await set_setting(session, "google_health.refresh_token", refresh)
+        # Fresh token — clear the "needs reconnect" flag so the banner disappears.
+        await set_setting(session, "google_health.auth_error", None)
     await set_setting(session, "google_health.oauth_state", None)
     await session.commit()
     return _back("connected" if refresh else "no_refresh_token")

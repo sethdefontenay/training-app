@@ -91,6 +91,12 @@ class IntegrationNotConfigured(RuntimeError):
     """Raised when the real provider lacks credentials."""
 
 
+class IntegrationAuthExpired(RuntimeError):
+    """Raised when the stored OAuth refresh token is expired/revoked and the user
+    must re-consent (Google returns 400 invalid_grant). Distinct from a missing
+    config so the UI can prompt a one-tap reconnect rather than a full setup."""
+
+
 @dataclass
 class StepRecord:
     date: date
@@ -143,6 +149,10 @@ class GoogleHealthProvider:
                 "refresh_token": self._refresh_token,
             },
         )
+        if resp.status_code == 400 and "invalid_grant" in resp.text:
+            raise IntegrationAuthExpired(
+                "Google Health authorization expired — reconnect in Settings"
+            )
         resp.raise_for_status()
         return str(resp.json()["access_token"])
 

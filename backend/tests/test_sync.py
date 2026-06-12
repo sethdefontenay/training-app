@@ -6,9 +6,22 @@ from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.sync import get_health_provider
-from app.integrations.health import SleepRecord, StepRecord
+from app.integrations.health import IntegrationAuthExpired, SleepRecord, StepRecord
 from app.main import app
 from app.models import StepsDay
+
+
+class ExpiredProvider:
+    async def fetch(self, start: date, end: date) -> tuple[list[StepRecord], list[SleepRecord]]:
+        raise IntegrationAuthExpired("expired")
+
+
+async def _connect_google(auth_client: AsyncClient) -> None:
+    """Mark Google Health 'connected' so needs_reconnect can flip on auth failure."""
+    await auth_client.put(
+        "/api/v1/settings/google-health",
+        json={"client_id": "id", "client_secret": "secret", "refresh_token": "rt"},
+    )
 
 
 class FakeProvider:
@@ -78,3 +91,23 @@ async def test_unconfigured_provider_surfaces_503(auth_client: AsyncClient) -> N
     app.dependency_overrides.pop(get_health_provider, None)
     resp = await auth_client.post("/api/v1/sync/steps-sleep", params={"days": 1})
     assert resp.status_code == 503
+
+
+async def test_expired_token_returns_409_and_flags_reconnect(auth_client: AsyncClient) -> None:
+    await _connect_google(auth_client)
+    app.dependency_overrides[get_health_provider] = lambda: ExpiredProvider()
+    resp = await auth_client.post("/api/v1/sync/steps-sleep", params={"days": 1})
+    assert resp.status_code == 409
+    status = (await auth_client.get("/api/v1/settings/google-health")).json()
+    assert status["needs_reconnect"] is True
+
+
+async def test_successful_sync_clears_reconnect_flag(auth_client: AsyncClient) -> None:
+    await _connect_google(auth_client)
+    app.dependency_overrides[get_health_provider] = lambda: ExpiredProvider()
+    await auth_client.post("/api/v1/sync/steps-sleep", params={"days": 1})
+    # A healthy sync afterwards must clear the flag.
+    _use_provider([StepRecord(date(2026, 5, 25), 733, 7000)], [])
+    await auth_client.post("/api/v1/sync/steps-sleep", params={"days": 1})
+    status = (await auth_client.get("/api/v1/settings/google-health")).json()
+    assert status["needs_reconnect"] is False

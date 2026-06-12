@@ -11,10 +11,11 @@ from app.config import get_settings
 from app.integrations.health import (
     GoogleHealthProvider,
     HealthProvider,
+    IntegrationAuthExpired,
     IntegrationNotConfigured,
     sync_steps_sleep,
 )
-from app.services.settings import google_health_config
+from app.services.settings import google_health_config, set_setting
 
 router = APIRouter(prefix="/sync", tags=["sync"])
 _settings = get_settings()
@@ -46,6 +47,12 @@ async def sync_health(
     start = end - timedelta(days=days - 1)
     try:
         result = await sync_steps_sleep(session, provider, start, end)
+    except IntegrationAuthExpired as e:
+        # Flag the dead token so the app can surface a reconnect prompt. Cleared on
+        # the next successful sync or when the OAuth callback stores a fresh token.
+        await set_setting(session, "google_health.auth_error", "1")
+        await session.commit()
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e)) from e
     except IntegrationNotConfigured as e:
         raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(e)) from e
     except NotImplementedError as e:
@@ -53,6 +60,9 @@ async def sync_health(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Health provider not yet implemented (needs credentials)",
         ) from e
+    # Healthy sync — clear any stale reconnect flag.
+    await set_setting(session, "google_health.auth_error", None)
+    await session.commit()
     return {
         "steps_synced": result.steps_synced,
         "sleep_synced": result.sleep_synced,
