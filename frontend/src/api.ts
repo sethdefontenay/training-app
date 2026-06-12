@@ -38,6 +38,21 @@ export const todayLocal = (): string => {
   return `${d.getFullYear()}-${m}-${day}`;
 };
 
+/** Shift a YYYY-MM-DD day string by `delta` days, staying in local time. */
+export const shiftDay = (day: string, delta: number): string => {
+  const [y, m, d] = day.split("-").map(Number);
+  const dt = new Date(y, m - 1, d + delta);
+  const mm = String(dt.getMonth() + 1).padStart(2, "0");
+  const dd = String(dt.getDate()).padStart(2, "0");
+  return `${dt.getFullYear()}-${mm}-${dd}`;
+};
+
+/** Long weekday name ("Monday") for a YYYY-MM-DD day string (local). */
+export const weekdayOf = (day: string): string => {
+  const [y, m, d] = day.split("-").map(Number);
+  return new Date(y, m - 1, d).toLocaleDateString(undefined, { weekday: "long" });
+};
+
 export const get = <T>(p: string) => api<T>(p);
 export const post = <T>(p: string, body?: unknown) =>
   api<T>(p, { method: "POST", body: body ? JSON.stringify(body) : undefined });
