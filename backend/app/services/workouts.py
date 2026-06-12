@@ -221,9 +221,7 @@ async def last_week_for_exercises(
         .subquery()
     )
     rows = (
-        await session.execute(
-            select(ranked.c.eid, ranked.c.weight).where(ranked.c.rnk == 1)
-        )
+        await session.execute(select(ranked.c.eid, ranked.c.weight).where(ranked.c.rnk == 1))
     ).all()
 
     weights_by_ex: dict[int, list[float]] = {}

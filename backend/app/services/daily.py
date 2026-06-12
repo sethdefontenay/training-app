@@ -93,15 +93,14 @@ async def _workout_block(
     sess = await session.scalar(select(Session).where(Session.date == day))
     completed_by_ex: dict[int, int] = {}
     if sess is not None:
-        completed_by_ex = dict(
-            (
-                await session.execute(
-                    select(SetEntry.exercise_id, func.count())
-                    .where(SetEntry.session_id == sess.id)
-                    .group_by(SetEntry.exercise_id)
-                )
-            ).all()
-        )
+        rows = (
+            await session.execute(
+                select(SetEntry.exercise_id, func.count())
+                .where(SetEntry.session_id == sess.id)
+                .group_by(SetEntry.exercise_id)
+            )
+        ).all()
+        completed_by_ex = {row[0]: row[1] for row in rows}
 
     # Last-week numbers for every exercise in one query, computed server-side so the
     # frontend no longer fires a request per exercise (the old N+1 + slow-load bug).

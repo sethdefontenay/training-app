@@ -74,7 +74,7 @@ async def latest_per_metric(session: AsyncSession, on_or_before: date) -> dict[s
     value seen for each field. A single user has few measurement rows, so scanning them
     is far cheaper than six round-trips.
     """
-    out: dict[str, float | None] = {f: None for f in MEASUREMENT_FIELDS}
+    out: dict[str, float | None] = dict.fromkeys(MEASUREMENT_FIELDS)
     remaining = set(MEASUREMENT_FIELDS)
     rows = (
         (
