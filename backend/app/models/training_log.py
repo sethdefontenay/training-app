@@ -3,7 +3,7 @@
 from datetime import date, datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import Date, DateTime, ForeignKey, Text, UniqueConstraint
+from sqlalchemy import Date, DateTime, ForeignKey, Index, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base, TimestampMixin
@@ -35,6 +35,10 @@ class Session(Base, TimestampMixin):
 
 class SetEntry(Base, TimestampMixin):
     __tablename__ = "set_entry"
+    # Hot lookups filter on (session_id, exercise_id): per-exercise set counts on the
+    # daily/workout pages and the next set_index on logging. set_entry grows with every
+    # set logged, so back the composite directly rather than lean on session_id alone.
+    __table_args__ = (Index("ix_set_entry_session_exercise", "session_id", "exercise_id"),)
 
     id: Mapped[int] = mapped_column(primary_key=True)
     session_id: Mapped[int] = mapped_column(

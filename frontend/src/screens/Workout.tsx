@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { get, post, todayLocal } from "../api";
 
-type Ex = { slug: string; name: string; sets_x_reps: string };
+type Ex = { slug: string; name: string; sets_x_reps: string; last_week: string };
 type DailyView = { workout: { label: string; exercises: Ex[] } | null };
 
 const today = todayLocal;
@@ -9,19 +9,12 @@ const today = todayLocal;
 export default function Workout() {
   const day = today();
   const [exercises, setExercises] = useState<Ex[]>([]);
-  const [lastWeek, setLastWeek] = useState<Record<string, string>>({});
   const [sessionId, setSessionId] = useState<number | null>(null);
 
   useEffect(() => {
-    get<DailyView>(`/daily/${day}`).then((v) => {
-      const ex = v.workout?.exercises ?? [];
-      setExercises(ex);
-      ex.forEach((e) =>
-        get<{ display: string }>(`/exercises/${e.slug}/last-week?before=${day}`).then((r) =>
-          setLastWeek((lw) => ({ ...lw, [e.slug]: r.display }))
-        )
-      );
-    });
+    // Last-week numbers now ship with the daily view (one request), so there's no
+    // per-exercise fan-out to wait on — the workout block renders in a single round-trip.
+    get<DailyView>(`/daily/${day}`).then((v) => setExercises(v.workout?.exercises ?? []));
   }, []);
 
   const ensureSession = async (): Promise<number> => {
@@ -42,7 +35,7 @@ export default function Workout() {
     <div className="space-y-4">
       <h1 className="text-2xl font-bold">Log workout</h1>
       {exercises.map((e) => (
-        <Row key={e.slug} ex={e} last={lastWeek[e.slug] ?? "…"} onLog={logSet} />
+        <Row key={e.slug} ex={e} last={e.last_week} onLog={logSet} />
       ))}
     </div>
   );

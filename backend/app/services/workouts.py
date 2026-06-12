@@ -7,7 +7,7 @@ Last-week rule (LOCKED): show ONLY the heaviest weight from the most recent PRIO
 
 from datetime import date
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import Exercise, Session, SetEntry
@@ -189,3 +189,51 @@ async def last_week_display(session: AsyncSession, exercise_slug: str, before: d
     if not weights:
         return BODYWEIGHT
     return _format_weight(max(weights))
+
+
+async def last_week_for_exercises(
+    session: AsyncSession, exercise_ids: list[int], before: date
+) -> dict[int, str]:
+    """Batch version of `last_week_display` for many exercises in a single query.
+
+    Same locked rule: the heaviest weight from each exercise's most recent PRIOR session
+    (strictly before `before`). Returns {exercise_id: display} containing ONLY exercises
+    that have prior history — "BW" if that session was bodyweight, else "N kg". Exercises
+    with no prior history are absent from the dict (caller renders "—").
+
+    Used by the daily view so the workout block ships last-week numbers in one response,
+    instead of the frontend firing one HTTP request (3 queries each) per exercise.
+    """
+    if not exercise_ids:
+        return {}
+    # rank() ties on the same date -> every set from the most-recent prior session gets
+    # rnk == 1, so we keep all of that session's sets and take the heaviest per exercise.
+    ranked = (
+        select(
+            SetEntry.exercise_id.label("eid"),
+            SetEntry.weight.label("weight"),
+            func.rank()
+            .over(partition_by=SetEntry.exercise_id, order_by=Session.date.desc())
+            .label("rnk"),
+        )
+        .join(Session, SetEntry.session_id == Session.id)
+        .where(SetEntry.exercise_id.in_(exercise_ids), Session.date < before)
+        .subquery()
+    )
+    rows = (
+        await session.execute(
+            select(ranked.c.eid, ranked.c.weight).where(ranked.c.rnk == 1)
+        )
+    ).all()
+
+    weights_by_ex: dict[int, list[float]] = {}
+    seen: set[int] = set()
+    for eid, weight in rows:
+        seen.add(eid)
+        f = _to_float(weight)
+        if f is not None:
+            weights_by_ex.setdefault(eid, []).append(f)
+    return {
+        eid: _format_weight(max(weights_by_ex[eid])) if eid in weights_by_ex else BODYWEIGHT
+        for eid in seen
+    }
