@@ -6,6 +6,13 @@ type DailyView = { workout: { label: string; exercises: Ex[] } | null };
 
 const today = todayLocal;
 
+// Prescribed reps live in sets_x_reps like "4 × 15" or "3 × 10 per leg" — pull the
+// first number after the "×" so the reps field starts pre-filled with the target.
+function prescribedReps(setsXReps: string): string {
+  const after = setsXReps.split("×")[1];
+  return after?.match(/\d+/)?.[0] ?? "";
+}
+
 export default function Workout() {
   const day = today();
   const [exercises, setExercises] = useState<Ex[]>([]);
@@ -50,7 +57,7 @@ function Row({
   last: string;
   onLog: (slug: string, reps: string, weight: string) => Promise<void>;
 }) {
-  const [reps, setReps] = useState("");
+  const [reps, setReps] = useState(() => prescribedReps(ex.sets_x_reps));
   const [weight, setWeight] = useState("");
   const [done, setDone] = useState(0);
   return (
