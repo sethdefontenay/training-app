@@ -21,6 +21,8 @@ type DailyView = {
   daily_carbs_total: number | null;
   steps: { steps: number | null; target: number | null };
   wellbeing: { energy: number | null; motivation: number | null; stress: number | null; hunger: number | null };
+  water_units: number;
+  electrolytes_done: boolean;
 };
 
 const today = todayLocal;
@@ -147,6 +149,25 @@ export default function Today() {
       load();
     }
   };
+  // Water is logged as "drank my 2 L" (water_units = 2); electrolytes is a simple done flag.
+  const WATER_TARGET_L = 2;
+  const toggleWater = async (checked: boolean) => {
+    const units = checked ? WATER_TARGET_L : 0;
+    setView((v) => (v ? { ...v, water_units: units } : v));
+    try {
+      await put(`/daily/${day}/log`, { water_units: units });
+    } finally {
+      load();
+    }
+  };
+  const toggleElectrolytes = async (checked: boolean) => {
+    setView((v) => (v ? { ...v, electrolytes_done: checked } : v));
+    try {
+      await put(`/daily/${day}/log`, { electrolytes_done: checked });
+    } finally {
+      load();
+    }
+  };
 
   return (
     <div onTouchStart={onTouchStart} onTouchEnd={onTouchEnd} className="space-y-6">
@@ -247,6 +268,34 @@ export default function Today() {
             </label>
           ))}
         </div>
+      </section>
+
+      <section>
+        <h2 className="mb-2 font-semibold">Hydration &amp; electrolytes</h2>
+        <ul className="space-y-1">
+          <li className="rounded bg-slate-800 px-3 py-2">
+            <label className={`flex items-center gap-2 ${view.water_units >= WATER_TARGET_L ? "text-slate-500" : ""}`}>
+              <input
+                type="checkbox"
+                checked={view.water_units >= WATER_TARGET_L}
+                disabled={readOnly}
+                onChange={(e) => toggleWater(e.target.checked)}
+              />
+              Drank 2 L water
+            </label>
+          </li>
+          <li className="rounded bg-slate-800 px-3 py-2">
+            <label className={`flex items-center gap-2 ${view.electrolytes_done ? "text-slate-500" : ""}`}>
+              <input
+                type="checkbox"
+                checked={view.electrolytes_done}
+                disabled={readOnly}
+                onChange={(e) => toggleElectrolytes(e.target.checked)}
+              />
+              Electrolytes
+            </label>
+          </li>
+        </ul>
       </section>
 
       <p className="text-sm text-slate-400">
