@@ -30,6 +30,7 @@ export default function ExerciseProgress() {
   const [days, setDays] = useState<TrainingDay[] | null>(null);
   const [sel, setSel] = useState<string | null>(null);
   const [prog, setProg] = useState<Progress | null>(null);
+  const [error, setError] = useState(false);
 
   useEffect(() => {
     get<PlanDetail>("/plans/current/detail")
@@ -40,14 +41,17 @@ export default function ExerciseProgress() {
   const select = (slug: string) => {
     setSel(slug);
     setProg(null);
-    get<Progress>(`/workouts/exercises/${slug}/progress`).then(setProg);
+    setError(false);
+    get<Progress>(`/exercises/${slug}/progress`)
+      .then(setProg)
+      .catch(() => setError(true));
   };
 
   return (
     <div className="space-y-5">
       <h1 className="text-2xl font-bold">Exercise progress</h1>
 
-      {sel && <ProgressPanel slug={sel} prog={prog} />}
+      {sel && <ProgressPanel slug={sel} prog={prog} error={error} />}
 
       {days === null ? (
         <p className="text-slate-400">Loading…</p>
@@ -79,7 +83,18 @@ export default function ExerciseProgress() {
   );
 }
 
-function ProgressPanel({ slug, prog }: { slug: string; prog: Progress | null }) {
+function ProgressPanel({
+  slug,
+  prog,
+  error,
+}: {
+  slug: string;
+  prog: Progress | null;
+  error: boolean;
+}) {
+  if (error) {
+    return <p className="text-amber-300">Couldn't load progress for this exercise.</p>;
+  }
   if (!prog || prog.slug !== slug) {
     return <p className="text-slate-400">Loading…</p>;
   }
