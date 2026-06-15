@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { get, post, todayLocal } from "../api";
+import { useAuth } from "../auth";
 
 type Ex = { slug: string; name: string; sets_x_reps: string; last_week: string };
 type DailyView = { workout: { label: string; exercises: Ex[] } | null };
@@ -16,6 +17,7 @@ function prescribedReps(setsXReps: string): string {
 }
 
 export default function Workout() {
+  const { readOnly } = useAuth();
   const day = today();
   const [exercises, setExercises] = useState<Ex[]>([]);
   const [sessionId, setSessionId] = useState<number | null>(null);
@@ -61,7 +63,14 @@ export default function Workout() {
       <h1 className="text-2xl font-bold">Log workout</h1>
       {loaded &&
         exercises.map((e) => (
-          <Row key={e.slug} ex={e} last={e.last_week} initialDone={logged[e.slug] ?? 0} onLog={logSet} />
+          <Row
+            key={e.slug}
+            ex={e}
+            last={e.last_week}
+            initialDone={logged[e.slug] ?? 0}
+            readOnly={readOnly}
+            onLog={logSet}
+          />
         ))}
     </div>
   );
@@ -71,11 +80,13 @@ function Row({
   ex,
   last,
   initialDone,
+  readOnly,
   onLog,
 }: {
   ex: Ex;
   last: string;
   initialDone: number;
+  readOnly: boolean;
   onLog: (slug: string, reps: string, weight: string) => Promise<void>;
 }) {
   const [reps, setReps] = useState(() => prescribedReps(ex.sets_x_reps));
@@ -90,6 +101,7 @@ function Row({
       <div className="text-sm text-slate-400">
         {ex.sets_x_reps} · {done} logged
       </div>
+      {readOnly ? null : (
       <div className="mt-2 flex gap-2">
         <input
           placeholder="reps"
@@ -115,6 +127,7 @@ function Row({
           + Set
         </button>
       </div>
+      )}
     </div>
   );
 }

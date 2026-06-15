@@ -11,6 +11,7 @@ import {
   YAxis,
 } from "recharts";
 import { get, post } from "../api";
+import { useAuth } from "../auth";
 
 type DayPoint = { min: number; mmol_l: number | null; iob: number };
 type Meal = { min: number; name: string; carbs_g: number | null };
@@ -51,6 +52,7 @@ const hhmm = (m: number) =>
 const mmdd = (d: string) => d.slice(5);
 
 export default function Diabetes() {
+  const { readOnly } = useAuth();
   const [range, setRange] = useState<Range>("day");
   const [graph, setGraph] = useState<Graph | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
@@ -85,13 +87,15 @@ export default function Diabetes() {
     <div className="space-y-5">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold">Diabetes record</h1>
-        <button
-          onClick={pull}
-          disabled={pulling}
-          className="rounded bg-emerald-600 px-4 py-2 text-sm font-semibold disabled:opacity-50"
-        >
-          {pulling ? "Pulling…" : "Pull from Tidepool"}
-        </button>
+        {!readOnly && (
+          <button
+            onClick={pull}
+            disabled={pulling}
+            className="rounded bg-emerald-600 px-4 py-2 text-sm font-semibold disabled:opacity-50"
+          >
+            {pulling ? "Pulling…" : "Pull from Tidepool"}
+          </button>
+        )}
       </div>
 
       <div className="flex gap-2">

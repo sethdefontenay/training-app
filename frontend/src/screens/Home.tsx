@@ -1,4 +1,5 @@
 import { Link } from "react-router-dom";
+import { useAuth } from "../auth";
 
 const AREAS = [
   { to: "/today", label: "Today", hint: "activities, meals & wellbeing", primary: true },
@@ -14,11 +15,19 @@ const AREAS = [
 ];
 
 export default function Home() {
+  const { readOnly } = useAuth();
+  // Trainers get a read-only view of everything except settings, which is hidden.
+  const areas = readOnly ? AREAS.filter((a) => a.to !== "/settings") : AREAS;
   return (
     <div className="space-y-4">
       <h1 className="text-2xl font-bold">Home</h1>
+      {readOnly && (
+        <p className="rounded bg-slate-800 px-3 py-2 text-sm text-slate-400">
+          Read-only coach view — you can see everything but can't make changes.
+        </p>
+      )}
       <div className="grid gap-3">
-        {AREAS.map((a) => (
+        {areas.map((a) => (
           <Link
             key={a.to}
             to={a.to}

@@ -1,5 +1,6 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { get, patch, post, put, todayLocal } from "../api";
+import { useAuth } from "../auth";
 
 type Metric = { values: { date: string; value: number }[]; average: number | null };
 type Sleep = { avg_efficiency: number | null; avg_asleep_min: number | null; nights: number };
@@ -12,6 +13,8 @@ type View = {
   steps_avg: number | null;
   sleep: Sleep;
   sessions_logged: number;
+  worked_on: string | null;
+  struggles: string | null;
   completed: boolean;
 };
 
@@ -27,10 +30,19 @@ const FIELDS: [string, string][] = [
 const today = todayLocal;
 
 export default function CheckIn() {
+  const { readOnly } = useAuth();
   const [ci, setCi] = useState<View | null>(null);
   const [worked, setWorked] = useState("");
   const [struggles, setStruggles] = useState("");
   const [meas, setMeas] = useState<Record<string, string>>({});
+
+  // A trainer can't start a check-in (it's a write), so load the most recent one to view.
+  useEffect(() => {
+    if (!readOnly) return;
+    get<{ id: number }[]>("/check-ins").then((list) => {
+      if (list.length) get<View>(`/check-ins/${list[0].id}`).then(setCi);
+    });
+  }, [readOnly]);
 
   const start = async () => setCi(await post<View>("/check-ins", {}));
   const refresh = async () => ci && setCi(await get<View>(`/check-ins/${ci.id}`));
@@ -52,9 +64,13 @@ export default function CheckIn() {
     return (
       <div className="space-y-4">
         <h1 className="text-2xl font-bold">Weekly check-in</h1>
-        <button onClick={start} className="rounded bg-emerald-600 px-4 py-2 font-semibold">
-          Start check-in (last 7 days)
-        </button>
+        {readOnly ? (
+          <p className="text-slate-400">No check-ins yet.</p>
+        ) : (
+          <button onClick={start} className="rounded bg-emerald-600 px-4 py-2 font-semibold">
+            Start check-in (last 7 days)
+          </button>
+        )}
       </div>
     );
 
@@ -102,51 +118,68 @@ export default function CheckIn() {
         </div>
       </section>
 
-      <section>
-        <h2 className="mb-1 font-semibold">Enter today's measurements</h2>
-        <div className="grid grid-cols-3 gap-2">
-          {FIELDS.map(([k, label]) => (
-            <label key={k} className="text-sm">
-              <span className="text-slate-400">{label}</span>
-              <input
-                type="number"
-                step="0.1"
-                value={meas[k] ?? ""}
-                onChange={(e) => setMeas({ ...meas, [k]: e.target.value })}
-                className="mt-1 w-full rounded bg-slate-700 px-2 py-1"
-              />
-            </label>
-          ))}
-        </div>
-        <button
-          onClick={saveMeasurements}
-          className="mt-2 rounded bg-emerald-600 px-3 py-1 text-sm font-semibold"
-        >
-          Save measurements
-        </button>
-      </section>
+      {!readOnly && (
+        <section>
+          <h2 className="mb-1 font-semibold">Enter today's measurements</h2>
+          <div className="grid grid-cols-3 gap-2">
+            {FIELDS.map(([k, label]) => (
+              <label key={k} className="text-sm">
+                <span className="text-slate-400">{label}</span>
+                <input
+                  type="number"
+                  step="0.1"
+                  value={meas[k] ?? ""}
+                  onChange={(e) => setMeas({ ...meas, [k]: e.target.value })}
+                  className="mt-1 w-full rounded bg-slate-700 px-2 py-1"
+                />
+              </label>
+            ))}
+          </div>
+          <button
+            onClick={saveMeasurements}
+            className="mt-2 rounded bg-emerald-600 px-3 py-1 text-sm font-semibold"
+          >
+            Save measurements
+          </button>
+        </section>
+      )}
 
-      <textarea
-        placeholder="What I worked on this week"
-        value={worked}
-        onChange={(e) => setWorked(e.target.value)}
-        onBlur={saveReflections}
-        className="w-full rounded bg-slate-800 p-2"
-      />
-      <textarea
-        placeholder="Struggles this week"
-        value={struggles}
-        onChange={(e) => setStruggles(e.target.value)}
-        onBlur={saveReflections}
-        className="w-full rounded bg-slate-800 p-2"
-      />
-      <button
-        onClick={finish}
-        className="rounded bg-emerald-600 px-4 py-2 font-semibold disabled:opacity-50"
-        disabled={ci.completed}
-      >
-        {ci.completed ? "Completed ✓" : "Finish"}
-      </button>
+      {readOnly ? (
+        <section className="space-y-3 text-sm">
+          <div>
+            <h2 className="mb-1 font-semibold">What I worked on this week</h2>
+            <p className="whitespace-pre-wrap text-slate-300">{ci.worked_on || "—"}</p>
+          </div>
+          <div>
+            <h2 className="mb-1 font-semibold">Struggles this week</h2>
+            <p className="whitespace-pre-wrap text-slate-300">{ci.struggles || "—"}</p>
+          </div>
+        </section>
+      ) : (
+        <>
+          <textarea
+            placeholder="What I worked on this week"
+            value={worked}
+            onChange={(e) => setWorked(e.target.value)}
+            onBlur={saveReflections}
+            className="w-full rounded bg-slate-800 p-2"
+          />
+          <textarea
+            placeholder="Struggles this week"
+            value={struggles}
+            onChange={(e) => setStruggles(e.target.value)}
+            onBlur={saveReflections}
+            className="w-full rounded bg-slate-800 p-2"
+          />
+          <button
+            onClick={finish}
+            className="rounded bg-emerald-600 px-4 py-2 font-semibold disabled:opacity-50"
+            disabled={ci.completed}
+          >
+            {ci.completed ? "Completed ✓" : "Finish"}
+          </button>
+        </>
+      )}
     </div>
   );
 }

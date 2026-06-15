@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { get, post, todayLocal } from "../api";
+import { useAuth } from "../auth";
 
 const FIELDS: [string, string][] = [
   ["waist_cm", "Waist"],
@@ -14,6 +15,7 @@ type Row = Record<string, number | string | null> & { date: string };
 type Detail = Row & { changes: Record<string, number> };
 
 export default function Measurements() {
+  const { readOnly } = useAuth();
   const [rows, setRows] = useState<Row[]>([]);
   const [date, setDate] = useState(todayLocal());
   const [vals, setVals] = useState<Record<string, string>>({});
@@ -39,6 +41,7 @@ export default function Measurements() {
     <div className="space-y-4">
       <h1 className="text-2xl font-bold">Measurements</h1>
 
+      {!readOnly && (
       <form onSubmit={save} className="space-y-2 rounded bg-slate-800 p-3">
         <input
           type="date"
@@ -62,6 +65,7 @@ export default function Measurements() {
         </div>
         <button className="rounded bg-emerald-600 px-3 py-1 text-sm">Save</button>
       </form>
+      )}
 
       <h2 className="font-semibold">History</h2>
       <p className="text-xs text-slate-500">Tap a date for that day's full detail.</p>

@@ -95,11 +95,17 @@ def makemigration(c, message):
 # --- data ------------------------------------------------------------------
 
 
-@task(help={"email": "login email", "password": "login password"})
-def seed(c, email, password):
-    """Create or reset the single user's login."""
+@task(
+    help={
+        "email": "login email",
+        "password": "login password",
+        "role": "owner (default, full access) or trainer (read-only coach login)",
+    }
+)
+def seed(c, email, password, role="owner"):
+    """Create or reset a login. Pass --role trainer for a read-only coach account."""
     with c.cd(BACKEND):
-        c.run(f"uv run python -m app.seed {email} {password}", pty=True)
+        c.run(f"uv run python -m app.seed {email} {password} {role}", pty=True)
 
 
 @task(help={"file": "path to a Tidepool data-model JSON export"})

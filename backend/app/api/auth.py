@@ -24,4 +24,4 @@ async def login(body: LoginRequest, session: SessionDep) -> TokenResponse:
 
 @router.get("/me")
 async def me(user: CurrentUser) -> dict[str, str | int]:
-    return {"id": user.id, "email": user.email}
+    return {"id": user.id, "email": user.email, "role": user.role}

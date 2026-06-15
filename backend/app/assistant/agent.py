@@ -53,8 +53,14 @@ class AssistantNotConfigured(RuntimeError):
     pass
 
 
-async def run_chat(session: AsyncSession, messages: list[dict[str, object]]) -> ChatResult:
-    """Run the tool-use loop. `messages` is the conversation so far ({role, content})."""
+async def run_chat(
+    session: AsyncSession, messages: list[dict[str, object]], *, read_only: bool = False
+) -> ChatResult:
+    """Run the tool-use loop. `messages` is the conversation so far ({role, content}).
+
+    read_only=True (trainer/coach access) confines the agent to read tools: the writes
+    are withheld from the model, and any attempt to call one is refused below.
+    """
     settings = get_settings()
     if not settings.anthropic_api_key:
         raise AssistantNotConfigured("Assistant not configured — set ANTHROPIC_API_KEY.")
@@ -66,7 +72,13 @@ async def run_chat(session: AsyncSession, messages: list[dict[str, object]]) -> 
         f"(time {now:%H:%M}) in Seth's timezone, {settings.timezone}. "
         "Compute relative dates from this."
     )
-    tools = [*anthropic_tools(), _WEB_SEARCH]
+    if read_only:
+        system += (
+            "\n\nThis user is a read-only coach. You can read and report on all data but "
+            "you CANNOT make any changes — you have no tools to log, check off, or record "
+            "anything. If asked to change data, explain that this is a view-only login."
+        )
+    tools = [*anthropic_tools(include_writes=not read_only), _WEB_SEARCH]
     convo: list[dict[str, object]] = list(messages)
     used: list[str] = []
 
@@ -96,6 +108,10 @@ async def run_chat(session: AsyncSession, messages: list[dict[str, object]]) -> 
             try:
                 if tool is None:
                     payload: object = {"error": f"unknown tool {block.name}"}
+                elif read_only and tool.writes:
+                    # Guardrail: refuse any mutation for a read-only user, even if the
+                    # tool somehow slipped into the offered set.
+                    payload = {"error": "read-only access: this account cannot make changes"}
                 else:
                     payload = await tool.handler(session, dict(block.input))
                 content = json.dumps(payload, default=str)

@@ -28,7 +28,11 @@ class ChatOut(BaseModel):
 @router.post("/chat", response_model=ChatOut)
 async def chat(body: ChatIn, session: SessionDep, user: CurrentUser) -> ChatOut:
     try:
-        result = await run_chat(session, [m.model_dump() for m in body.messages])
+        result = await run_chat(
+            session,
+            [m.model_dump() for m in body.messages],
+            read_only=user.role == "trainer",
+        )
     except AssistantNotConfigured as e:
         raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(e)) from e
     return ChatOut(reply=result.reply, tools_used=result.tools_used)

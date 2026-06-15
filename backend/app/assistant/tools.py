@@ -403,9 +403,14 @@ TOOLS: list[Tool] = _TOOLS
 TOOLS_BY_NAME: dict[str, Tool] = {t.name: t for t in _TOOLS}
 
 
-def anthropic_tools() -> list[JSON]:
-    """Tool definitions in the Anthropic Messages API shape."""
+def anthropic_tools(*, include_writes: bool = True) -> list[JSON]:
+    """Tool definitions in the Anthropic Messages API shape.
+
+    With include_writes=False the mutating tools are omitted entirely — used for
+    read-only (trainer) chats so the model is never even offered a write.
+    """
     return [
         {"name": t.name, "description": t.description, "input_schema": t.input_schema}
         for t in TOOLS
+        if include_writes or not t.writes
     ]

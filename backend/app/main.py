@@ -4,7 +4,7 @@ from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import APIRouter, FastAPI, HTTPException
+from fastapi import APIRouter, Depends, FastAPI, HTTPException
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
@@ -25,6 +25,7 @@ from app.api import (
 from app.api import (
     settings as settings_api,
 )
+from app.api.deps import enforce_role_access
 from app.config import get_settings
 from app.seed import create_user
 
@@ -62,7 +63,9 @@ async def health() -> dict[str, str]:
 
 # Versioned API surface. Use a router (NOT a mounted sub-app) so dependency overrides
 # and shared middleware apply uniformly.
-api_v1 = APIRouter(prefix="/api/v1")
+# The trainer read-only guard runs for every /api/v1 route (optional-auth, so it leaves
+# unauthed routes like /auth/login and /ping untouched).
+api_v1 = APIRouter(prefix="/api/v1", dependencies=[Depends(enforce_role_access)])
 
 
 @api_v1.get("/ping", tags=["meta"])

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { del, get, post, put, shiftDay, todayLocal, weekdayOf } from "../api";
+import { useAuth } from "../auth";
 
 type Meal = { id: number; name: string; slot: string; carbs_g: number | null; eaten: boolean };
 type Exercise = {
@@ -26,6 +27,7 @@ const today = todayLocal;
 const METRICS = ["energy", "motivation", "stress", "hunger"] as const;
 
 export default function Today() {
+  const { readOnly } = useAuth();
   const [day, setDay] = useState(today());
   const [view, setView] = useState<DailyView | null>(null);
   const isToday = day === today();
@@ -173,7 +175,7 @@ export default function Today() {
             ))}
           </ul>
           <Link to="/workout" className="mt-2 inline-block text-sm text-emerald-400">
-            Log sets →
+            {readOnly ? "View sets →" : "Log sets →"}
           </Link>
         </section>
       ) : (
@@ -190,6 +192,7 @@ export default function Today() {
                   <input
                     type="checkbox"
                     checked={m.done}
+                    disabled={readOnly}
                     onChange={() => toggleMobility(m.slug, m.done)}
                   />
                   {m.name}
@@ -214,6 +217,7 @@ export default function Today() {
                 <input
                   type="checkbox"
                   checked={m.eaten}
+                  disabled={readOnly}
                   onChange={() => toggleMeal(m.id, m.eaten)}
                 />
                 {m.name}
@@ -235,9 +239,10 @@ export default function Today() {
                 type="number"
                 min={1}
                 max={10}
+                disabled={readOnly}
                 defaultValue={view.wellbeing[k] ?? undefined}
                 onBlur={(e) => e.target.value && setMetric(k, Number(e.target.value))}
-                className="w-16 rounded bg-slate-700 px-2 py-1 text-right"
+                className="w-16 rounded bg-slate-700 px-2 py-1 text-right disabled:opacity-60"
               />
             </label>
           ))}

@@ -20,8 +20,11 @@ const ExerciseProgress = lazy(() => import("./screens/ExerciseProgress"));
 const Sleep = lazy(() => import("./screens/Sleep"));
 
 export default function App() {
-  const { isAuthed } = useAuth();
+  const { isAuthed, role, readOnly } = useAuth();
   if (!isAuthed) return <Login />;
+  // Hold rendering until the role is known so a trainer never momentarily sees the
+  // owner-only UI (Settings link, write controls) before it's gated.
+  if (role === null) return <p className="p-6 text-slate-400">Loading…</p>;
   return (
     <Routes>
       <Route element={<Layout />}>
@@ -57,7 +60,10 @@ export default function App() {
           }
         />
         <Route path="/plan" element={<Plan />} />
-        <Route path="/settings" element={<Settings />} />
+        <Route
+          path="/settings"
+          element={readOnly ? <Navigate to="/" replace /> : <Settings />}
+        />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>
     </Routes>

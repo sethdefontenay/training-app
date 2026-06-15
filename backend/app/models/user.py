@@ -11,3 +11,6 @@ class User(Base, TimestampMixin):
     id: Mapped[int] = mapped_column(primary_key=True)
     email: Mapped[str] = mapped_column(unique=True, index=True)
     hashed_password: Mapped[str] = mapped_column()
+    # "owner" has full access; "trainer" is read-only everywhere except the assistant
+    # chat, and cannot touch settings. Enforced in app.api.deps.enforce_role_access.
+    role: Mapped[str] = mapped_column(default="owner", server_default="owner")
