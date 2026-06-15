@@ -83,6 +83,40 @@ async def test_delete_set(auth_client: AsyncClient) -> None:
     assert detail.json()["sets"] == []
 
 
+async def test_create_session_is_idempotent_per_day(auth_client: AsyncClient) -> None:
+    # One workout per day: re-posting the same date returns the existing session,
+    # carrying its already-logged sets — not a fresh duplicate.
+    first = await _new_session(auth_client, "2026-05-25")
+    await auth_client.post(
+        f"/api/v1/sessions/{first}/sets",
+        json={"exercise_slug": "leg-press-machine", "reps": "15", "weight": "40"},
+    )
+    resp = await auth_client.post("/api/v1/sessions", json={"date": "2026-05-25"})
+    assert resp.status_code == 201
+    body = resp.json()
+    assert body["id"] == first
+    assert len(body["sets"]) == 1
+
+
+async def test_get_session_by_date_returns_existing(auth_client: AsyncClient) -> None:
+    sid = await _new_session(auth_client, "2026-05-25")
+    await auth_client.post(
+        f"/api/v1/sessions/{sid}/sets",
+        json={"exercise_slug": "leg-press-machine", "reps": "15", "weight": "40"},
+    )
+    resp = await auth_client.get("/api/v1/sessions/by-date/2026-05-25")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["id"] == sid
+    assert body["sets"][0]["exercise_slug"] == "leg-press-machine"
+
+
+async def test_get_session_by_date_none_when_absent(auth_client: AsyncClient) -> None:
+    resp = await auth_client.get("/api/v1/sessions/by-date/2026-05-25")
+    assert resp.status_code == 200
+    assert resp.json() is None
+
+
 # --- last-week column ---
 
 

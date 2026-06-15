@@ -41,10 +41,32 @@ def _to_set_read(entry: SetEntry, slug: str) -> SetRead:
     )
 
 
+def _session_read(s: Session) -> SessionRead:
+    ordered = sorted(s.sets, key=lambda e: (e.exercise_id, e.set_index))
+    return SessionRead(
+        id=s.id, date=s.date, sets=[_to_set_read(e, e.exercise.slug) for e in ordered]
+    )
+
+
+async def _session_with_sets(session: SessionDep, day: date) -> Session | None:
+    s: Session | None = await session.scalar(
+        select(Session)
+        .where(Session.date == day)
+        .options(selectinload(Session.sets).selectinload(SetEntry.exercise))
+    )
+    return s
+
+
 @router.post("/sessions", response_model=SessionRead, status_code=status.HTTP_201_CREATED)
 async def create_session(
     body: SessionCreate, session: SessionDep, user: CurrentUser
 ) -> SessionRead:
+    # One workout per day: if a session already exists for this date, return it (with
+    # its logged sets) rather than creating a duplicate. This keeps the log-workout
+    # screen idempotent across navigations.
+    existing = await _session_with_sets(session, body.date)
+    if existing is not None:
+        return _session_read(existing)
     s = Session(
         date=body.date,
         weekday=body.date.strftime("%A"),
@@ -54,6 +76,14 @@ async def create_session(
     await session.commit()
     await session.refresh(s)
     return SessionRead(id=s.id, date=s.date, sets=[])
+
+
+@router.get("/sessions/by-date/{day}", response_model=SessionRead | None)
+async def get_session_by_date(
+    day: date, session: SessionDep, user: CurrentUser
+) -> SessionRead | None:
+    s = await _session_with_sets(session, day)
+    return _session_read(s) if s is not None else None
 
 
 @router.get("/sessions", response_model=list[SessionSummary])
@@ -72,10 +102,7 @@ async def get_session_detail(
     )
     if s is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Session not found")
-    ordered = sorted(s.sets, key=lambda e: (e.exercise_id, e.set_index))
-    return SessionRead(
-        id=s.id, date=s.date, sets=[_to_set_read(e, e.exercise.slug) for e in ordered]
-    )
+    return _session_read(s)
 
 
 @router.post(

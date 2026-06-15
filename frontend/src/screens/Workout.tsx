@@ -3,6 +3,8 @@ import { get, post, todayLocal } from "../api";
 
 type Ex = { slug: string; name: string; sets_x_reps: string; last_week: string };
 type DailyView = { workout: { label: string; exercises: Ex[] } | null };
+type SetRead = { exercise_slug: string };
+type SessionRead = { id: number; sets: SetRead[] };
 
 const today = todayLocal;
 
@@ -17,15 +19,31 @@ export default function Workout() {
   const day = today();
   const [exercises, setExercises] = useState<Ex[]>([]);
   const [sessionId, setSessionId] = useState<number | null>(null);
+  // Sets already logged today, counted per exercise slug — seeds each row's badge so
+  // revisiting the screen shows prior progress instead of resetting to "0 logged".
+  const [logged, setLogged] = useState<Record<string, number>>({});
+  const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
     // Last-week numbers now ship with the daily view (one request), so there's no
     // per-exercise fan-out to wait on — the workout block renders in a single round-trip.
     get<DailyView>(`/daily/${day}`).then((v) => setExercises(v.workout?.exercises ?? []));
+    // Load today's existing workout (if one was already started) so its logged sets and
+    // session id are restored — navigating away and back must not lose or duplicate it.
+    get<SessionRead | null>(`/sessions/by-date/${day}`).then((s) => {
+      if (s) {
+        setSessionId(s.id);
+        const counts: Record<string, number> = {};
+        for (const set of s.sets) counts[set.exercise_slug] = (counts[set.exercise_slug] ?? 0) + 1;
+        setLogged(counts);
+      }
+      setLoaded(true);
+    });
   }, []);
 
   const ensureSession = async (): Promise<number> => {
     if (sessionId) return sessionId;
+    // Idempotent on the backend: returns the existing day's session if there is one.
     const s = await post<{ id: number }>("/sessions", { date: day });
     setSessionId(s.id);
     return s.id;
@@ -41,9 +59,10 @@ export default function Workout() {
   return (
     <div className="space-y-4">
       <h1 className="text-2xl font-bold">Log workout</h1>
-      {exercises.map((e) => (
-        <Row key={e.slug} ex={e} last={e.last_week} onLog={logSet} />
-      ))}
+      {loaded &&
+        exercises.map((e) => (
+          <Row key={e.slug} ex={e} last={e.last_week} initialDone={logged[e.slug] ?? 0} onLog={logSet} />
+        ))}
     </div>
   );
 }
@@ -51,15 +70,17 @@ export default function Workout() {
 function Row({
   ex,
   last,
+  initialDone,
   onLog,
 }: {
   ex: Ex;
   last: string;
+  initialDone: number;
   onLog: (slug: string, reps: string, weight: string) => Promise<void>;
 }) {
   const [reps, setReps] = useState(() => prescribedReps(ex.sets_x_reps));
   const [weight, setWeight] = useState("");
-  const [done, setDone] = useState(0);
+  const [done, setDone] = useState(initialDone);
   return (
     <div className="rounded bg-slate-800 p-3">
       <div className="flex justify-between">
