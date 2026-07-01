@@ -192,6 +192,11 @@ function ExerciseRunner({
     setPhase("working");
     setSecs(WORK_SECS);
   };
+  // End the rest early and begin the next set immediately.
+  const skipRest = () => {
+    setPhase("working");
+    setSecs(WORK_SECS);
+  };
 
   return (
     <div className="space-y-4">
@@ -265,7 +270,13 @@ function ExerciseRunner({
               Rest — next: set {done + 1} of {target}
             </p>
             <div className="font-mono text-6xl tabular-nums text-sky-400">{mmss(secs)}</div>
-            <p className="text-sm text-slate-500">Set {done + 1} starts automatically at 0:00</p>
+            <button
+              onClick={skipRest}
+              className="w-full rounded bg-emerald-600 py-3 text-lg font-semibold"
+            >
+              Skip rest
+            </button>
+            <p className="text-sm text-slate-500">…or set {done + 1} starts automatically at 0:00</p>
           </div>
         )}
 
