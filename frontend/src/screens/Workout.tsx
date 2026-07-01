@@ -180,7 +180,9 @@ function ExerciseRunner({
       } else if (phase === "working") {
         void finishSet(); // set's minute elapsed — log it and start the rest timer
       } else {
-        setPhase("idle"); // rest over — wait for the user to start the next set
+        // rest over — automatically begin the next set, no tap needed
+        setPhase("working");
+        setSecs(WORK_SECS);
       }
     }, 1000);
     return () => clearTimeout(id);
@@ -190,10 +192,6 @@ function ExerciseRunner({
   const startSet = () => {
     setPhase("working");
     setSecs(WORK_SECS);
-  };
-  const skipRest = () => {
-    setPhase("idle");
-    setSecs(0);
   };
 
   return (
@@ -252,12 +250,7 @@ function ExerciseRunner({
               Set {done + 1} of {target} — go!
             </p>
             <div className="font-mono text-6xl tabular-nums">{mmss(secs)}</div>
-            <button
-              onClick={() => void finishSet()}
-              className="w-full rounded bg-emerald-600 py-3 text-lg font-semibold"
-            >
-              Done set
-            </button>
+            <p className="text-sm text-slate-500">Rest starts automatically at 0:00</p>
           </div>
         )}
 
@@ -267,9 +260,7 @@ function ExerciseRunner({
               Rest — next: set {done + 1} of {target}
             </p>
             <div className="font-mono text-6xl tabular-nums text-sky-400">{mmss(secs)}</div>
-            <button onClick={skipRest} className="w-full rounded bg-slate-700 py-2 text-sm">
-              Skip rest
-            </button>
+            <p className="text-sm text-slate-500">Set {done + 1} starts automatically at 0:00</p>
           </div>
         )}
 
@@ -280,7 +271,7 @@ function ExerciseRunner({
               onClick={onBack}
               className="w-full rounded bg-emerald-600 py-3 text-lg font-semibold"
             >
-              Finish
+              Done
             </button>
           </div>
         )}
