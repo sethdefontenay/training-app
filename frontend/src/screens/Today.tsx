@@ -195,8 +195,11 @@ export default function Today() {
               </li>
             ))}
           </ul>
-          <Link to="/workout" className="mt-2 inline-block text-sm text-emerald-400">
-            {readOnly ? "View sets →" : "Log sets →"}
+          <Link
+            to="/workout"
+            className="mt-3 inline-block rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-500"
+          >
+            {readOnly ? "View workout" : "Start workout"}
           </Link>
         </section>
       ) : (
