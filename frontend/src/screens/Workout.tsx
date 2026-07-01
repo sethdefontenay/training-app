@@ -250,7 +250,13 @@ function ExerciseRunner({
               Set {done + 1} of {target} — go!
             </p>
             <div className="font-mono text-6xl tabular-nums">{mmss(secs)}</div>
-            <p className="text-sm text-slate-500">Rest starts automatically at 0:00</p>
+            <button
+              onClick={() => void finishSet()}
+              className="w-full rounded bg-emerald-600 py-3 text-lg font-semibold"
+            >
+              Set complete
+            </button>
+            <p className="text-sm text-slate-500">…or rest starts automatically at 0:00</p>
           </div>
         )}
 
