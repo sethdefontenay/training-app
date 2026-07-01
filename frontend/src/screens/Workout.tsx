@@ -159,8 +159,7 @@ function ExerciseRunner({
       const nd = done + 1;
       setDone(nd);
       if (nd >= target) {
-        setPhase("done");
-        setSecs(0);
+        onBack(); // last set logged — exercise complete, return to the list (now ticked ✓)
       } else {
         setPhase("resting");
         setSecs(REST_SECS);
