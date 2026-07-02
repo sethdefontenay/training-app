@@ -216,6 +216,13 @@ def test(c):
 
 
 @task
+def bdd(c):
+    """Run the executable BDD (Gherkin) suite — features/*.feature via pytest-bdd."""
+    with c.cd(BACKEND):
+        c.run("uv run pytest tests/bdd -v", pty=True)
+
+
+@task
 def lint(c):
     """Lint + type-check backend, lint frontend (no changes)."""
     with c.cd(BACKEND):

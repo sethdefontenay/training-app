@@ -36,8 +36,21 @@ Monorepo scaffold, GitHub repo (done), Railway project + Postgres, local `docker
 - Dashboard (steps / sleep / adherence).
 - Weekly review (adherence + progression aggregates).
 
+### Phase 6 — Post-v1 increments (shipped)
+- **Read-only trainer/coach login** — a second account (`role = "trainer"`) with read
+  access to every area except settings, and use of the AI assistant limited to read-only
+  tools. Enforced server-side (`app/api/deps.py: enforce_role_access`); the frontend hides
+  settings and write controls. Fails closed (unknown role → read-only). Spec: `features/trainer_access.feature`.
+- **Guided workout runner** — the daily workout runs set-by-set: pick a weight (defaults to
+  last session's top set), then a 60 s work timer → 90 s rest → repeat until the prescribed
+  sets are done, with "Set complete"/"Skip rest" shortcuts and auto-return on the final set.
+  One session per day (idempotent create + resume). Backend contract in `features/workout_logging.feature`.
+- **Daily water + electrolyte checks** — two adherence ticks on the daily view
+  (`features/daily_task_list.feature`).
+- **Mobility scheduling fix** — mobility belongs to training days only (not rest days).
+
 ## Phase 2: Post-Launch / Future
 
-- Read-only **coach view** (e.g. for the PT) — multi-user / role-based access.
 - Richer progression analytics and charts.
+- Multi-user beyond the single owner + single trainer.
 - Anything surfaced during the build that's better deferred than rushed into v1.

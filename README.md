@@ -77,8 +77,8 @@ invoke dev                # run backend (:8000) + frontend (:5173) together
 ```
 
 Other useful tasks: `invoke ci` (lint + types + tests), `invoke lint`, `invoke fmt`,
-`invoke test`, `invoke makemigration`, `invoke import-vault-remote` (push an Obsidian vault
-to a deployed instance over the API).
+`invoke test`, `invoke bdd` (run the executable Gherkin suite), `invoke makemigration`,
+`invoke import-vault-remote` (push an Obsidian vault to a deployed instance over the API).
 
 ## Configuration
 
@@ -100,6 +100,10 @@ Google Health and Tidepool credentials are entered in-app (Settings) and stored 
 
 ## Tests & specs
 
-Behaviour is specified BDD-first in `features/*.feature` (18 feature files) and covered by the
-`pytest` suite. CI runs backend lint/format/type-check/tests and the frontend lint/build on
-every push.
+Behaviour is specified BDD-first in `features/*.feature` (18 feature files), and **every
+feature is now executable** via `pytest-bdd`: each `.feature` has step definitions in
+`backend/tests/bdd/` that drive the real API. Run them with `invoke bdd`. Scenarios that
+require a live external service (Google Health / Tidepool / Gmail) or a live LLM (the
+assistant, plan extraction) are wired but `pytest.skip`-ped with a reason; pure client-side
+behaviour (home hub, navigation) is wired as documented no-ops. CI runs backend
+lint/format/type-check/tests (including the BDD suite) and the frontend lint/build on every push.

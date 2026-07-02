@@ -1,10 +1,11 @@
 """Sleep analysis: stage parsing, per-night hypnogram view, weekly trend."""
 
-from datetime import date
+from datetime import date, timedelta
 
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.clock import local_today
 from app.integrations.health import _parse_sleep
 from app.models import SleepNight
 
@@ -83,8 +84,10 @@ async def test_night_view_missing(auth_client: AsyncClient) -> None:
 
 
 async def test_trend_averages(auth_client: AsyncClient, session: AsyncSession) -> None:
-    session.add(SleepNight(date=date(2026, 5, 24), asleep_min=400, efficiency=90.0, deep_min=80))
-    session.add(SleepNight(date=date(2026, 5, 25), asleep_min=440, efficiency=94.0, deep_min=100))
+    # Seed within the trend window relative to today (fixed dates drift out of range over time).
+    d1, d2 = local_today() - timedelta(days=2), local_today() - timedelta(days=1)
+    session.add(SleepNight(date=d1, asleep_min=400, efficiency=90.0, deep_min=80))
+    session.add(SleepNight(date=d2, asleep_min=440, efficiency=94.0, deep_min=100))
     await session.commit()
     body = (await auth_client.get("/api/v1/sleep/trend?days=30")).json()
     assert body["averages"]["asleep_min"] == 420.0

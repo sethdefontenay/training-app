@@ -82,3 +82,20 @@ Feature: Workout logging
     When I open my workout history
     Then I see each logged day with its exercises and sets, most recent first
     And days with no logged sets are not shown
+
+  # ---------------------------------------------------------------------------
+  # One workout per day. The log-workout screen reuses today's session across
+  # navigations rather than creating a fresh one, so nothing is lost or duplicated.
+  # (The set-by-set guided runner — work/rest timers — is a client-side concern
+  # over this same contract and is not covered here.)
+  # ---------------------------------------------------------------------------
+
+  Scenario: Starting today's workout twice reuses the same session
+    When I start today's workout
+    And I start today's workout again
+    Then both refer to the same session for today
+
+  Scenario: Reopening the workout keeps the sets already logged
+    Given I logged 2 sets for "Leg Press Machine" today
+    When I reload today's workout
+    Then today's session still shows 2 logged sets for "Leg Press Machine"
