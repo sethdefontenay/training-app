@@ -44,7 +44,9 @@ class SetEntry(Base, TimestampMixin):
     session_id: Mapped[int] = mapped_column(
         ForeignKey("session.id", ondelete="CASCADE"), index=True
     )
-    exercise_id: Mapped[int] = mapped_column(ForeignKey("exercise.id"), index=True)
+    exercise_id: Mapped[int] = mapped_column(
+        ForeignKey("exercise.id", ondelete="CASCADE"), index=True
+    )
     set_index: Mapped[int]  # 1-indexed
     # Strings to match the vault; empty/None weight = bodyweight.
     reps: Mapped[str | None] = mapped_column(default=None)
@@ -62,7 +64,9 @@ class MobilityDone(OwnedMixin, Base, TimestampMixin):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     date: Mapped[date] = mapped_column(Date, index=True)
-    exercise_id: Mapped[int] = mapped_column(ForeignKey("exercise.id"), index=True)
+    exercise_id: Mapped[int] = mapped_column(
+        ForeignKey("exercise.id", ondelete="CASCADE"), index=True
+    )
 
 
 class MealCheck(OwnedMixin, Base, TimestampMixin):

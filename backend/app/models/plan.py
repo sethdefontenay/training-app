@@ -107,7 +107,9 @@ class Prescription(Base, TimestampMixin):
     training_day_id: Mapped[int] = mapped_column(
         ForeignKey("training_day.id", ondelete="CASCADE"), index=True
     )
-    exercise_id: Mapped[int] = mapped_column(ForeignKey("exercise.id"), index=True)
+    exercise_id: Mapped[int] = mapped_column(
+        ForeignKey("exercise.id", ondelete="CASCADE"), index=True
+    )
     sets_x_reps: Mapped[str]  # vault stores as string, e.g. "4 × 15", "3 × 10 per leg"
     prescribed_weight: Mapped[str | None] = mapped_column(default=None)  # kg string; empty = BW
     order: Mapped[int] = mapped_column(default=0)

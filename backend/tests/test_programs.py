@@ -5,7 +5,20 @@ from datetime import date
 
 from httpx import AsyncClient
 
+from app.models import MobilityDone, Prescription, ProgramExercise, SetEntry
+
 DAY = "2026-06-01"
+
+
+def test_exercise_fks_cascade_on_delete() -> None:
+    """Every FK to exercise.id from a user-owned table must cascade, so deleting a user
+    (which cascade-deletes their custom exercises) isn't blocked by a referencing row.
+    Enforced at the Postgres layer; this guards the model definitions from regressing."""
+    for model in (Prescription, SetEntry, MobilityDone, ProgramExercise):
+        fk = next(iter(model.__table__.c.exercise_id.foreign_keys))
+        assert fk.ondelete == "CASCADE", f"{model.__name__}.exercise_id must be ON DELETE CASCADE"
+
+
 WEEKDAY = date.fromisoformat(DAY).strftime("%A").lower()
 
 

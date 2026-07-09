@@ -41,7 +41,9 @@ class ProgramExercise(Base, TimestampMixin):
     program_id: Mapped[int] = mapped_column(
         ForeignKey("workout_program.id", ondelete="CASCADE"), index=True
     )
-    exercise_id: Mapped[int] = mapped_column(ForeignKey("exercise.id"), index=True)
+    exercise_id: Mapped[int] = mapped_column(
+        ForeignKey("exercise.id", ondelete="CASCADE"), index=True
+    )
     sets_x_reps: Mapped[str]
     prescribed_weight: Mapped[str | None] = mapped_column(default=None)  # kg string; empty = BW
     order: Mapped[int] = mapped_column(default=0)
