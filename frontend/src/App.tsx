@@ -7,6 +7,7 @@ import Home from "./screens/Home";
 import Login from "./screens/Login";
 import Measurements from "./screens/Measurements";
 import Plan from "./screens/Plan";
+import Planner from "./screens/Planner";
 import Settings from "./screens/Settings";
 import Shopping from "./screens/Shopping";
 import Today from "./screens/Today";
@@ -71,6 +72,7 @@ export default function App() {
           }
         />
         <Route path="/plan" element={<Plan />} />
+        <Route path="/planner" element={<Planner />} />
         <Route
           path="/settings"
           element={caps.hasHealthIntegrations ? <Settings /> : <Navigate to="/" replace />}

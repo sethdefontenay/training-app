@@ -10,6 +10,7 @@ const AREAS: {
   cap?: keyof Capabilities;
 }[] = [
   { to: "/today", label: "Today", hint: "activities, meals & wellbeing", primary: true },
+  { to: "/planner", label: "Workout planner", hint: "build & schedule your programs" },
   { to: "/shopping", label: "Weekly shopping list", hint: "" },
   { to: "/check-in", label: "Weekly check-in", hint: "for your PT", cap: "hasCheckins" },
   { to: "/measurements", label: "Measurements", hint: "" },
