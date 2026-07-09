@@ -6,13 +6,13 @@ from typing import TYPE_CHECKING
 from sqlalchemy import Date, DateTime, ForeignKey, Index, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from app.models.base import Base, TimestampMixin
+from app.models.base import Base, OwnedMixin, TimestampMixin
 
 if TYPE_CHECKING:
     from app.models.plan import Exercise
 
 
-class Session(Base, TimestampMixin):
+class Session(OwnedMixin, Base, TimestampMixin):
     __tablename__ = "session"
 
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -54,20 +54,24 @@ class SetEntry(Base, TimestampMixin):
     exercise: Mapped["Exercise"] = relationship()
 
 
-class MobilityDone(Base, TimestampMixin):
+class MobilityDone(OwnedMixin, Base, TimestampMixin):
     __tablename__ = "mobility_done"
-    __table_args__ = (UniqueConstraint("date", "exercise_id", name="uq_mobility_done_day_ex"),)
+    __table_args__ = (
+        UniqueConstraint("user_id", "date", "exercise_id", name="uq_mobility_done_day_ex"),
+    )
 
     id: Mapped[int] = mapped_column(primary_key=True)
     date: Mapped[date] = mapped_column(Date, index=True)
     exercise_id: Mapped[int] = mapped_column(ForeignKey("exercise.id"), index=True)
 
 
-class MealCheck(Base, TimestampMixin):
+class MealCheck(OwnedMixin, Base, TimestampMixin):
     """Adherence only: 'I ate the planned meal' — no intake macros captured here."""
 
     __tablename__ = "meal_check"
-    __table_args__ = (UniqueConstraint("date", "meal_id", name="uq_meal_check_day_meal"),)
+    __table_args__ = (
+        UniqueConstraint("user_id", "date", "meal_id", name="uq_meal_check_day_meal"),
+    )
 
     id: Mapped[int] = mapped_column(primary_key=True)
     date: Mapped[date] = mapped_column(Date, index=True)

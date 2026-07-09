@@ -33,13 +33,14 @@ from app.schemas.daily import (
 from app.services.workouts import NO_HISTORY, last_week_for_exercises
 
 
-async def _mobility_for(session: AsyncSession, day: date) -> list[MobilityItem]:
+async def _mobility_for(session: AsyncSession, day: date, user_id: int) -> list[MobilityItem]:
     """The mobility checklist = the moves you actually do (from history), with today's
     done-state. (Derived from MobilityDone; upgrade to a prescribed round when available.)"""
     catalog = (
         await session.execute(
             select(Exercise.slug, Exercise.name)
             .join(MobilityDone, MobilityDone.exercise_id == Exercise.id)
+            .where(MobilityDone.user_id == user_id)
             .distinct()
             .order_by(Exercise.name)
         )
@@ -49,7 +50,7 @@ async def _mobility_for(session: AsyncSession, day: date) -> list[MobilityItem]:
             await session.execute(
                 select(Exercise.slug)
                 .join(MobilityDone, MobilityDone.exercise_id == Exercise.id)
-                .where(MobilityDone.date == day)
+                .where(MobilityDone.date == day, MobilityDone.user_id == user_id)
             )
         )
         .scalars()
@@ -63,13 +64,15 @@ def _target_sets(sets_x_reps: str) -> int | None:
     return int(m.group(1)) if m else None
 
 
-async def _current_plan(session: AsyncSession) -> Plan | None:
-    plan: Plan | None = await session.scalar(select(Plan).where(Plan.is_current.is_(True)).limit(1))
+async def _current_plan(session: AsyncSession, user_id: int) -> Plan | None:
+    plan: Plan | None = await session.scalar(
+        select(Plan).where(Plan.is_current.is_(True), Plan.user_id == user_id).limit(1)
+    )
     return plan
 
 
 async def _workout_block(
-    session: AsyncSession, plan: Plan, weekday: str, day: date
+    session: AsyncSession, plan: Plan, weekday: str, day: date, user_id: int
 ) -> WorkoutBlock | None:
     sched = await session.scalar(
         select(WeekdaySchedule).where(
@@ -90,7 +93,9 @@ async def _workout_block(
     exercise_ids = [p.exercise_id for p in prescriptions]
 
     # Completed-set counts for today, all exercises in one grouped query (was N queries).
-    sess = await session.scalar(select(Session).where(Session.date == day))
+    sess = await session.scalar(
+        select(Session).where(Session.date == day, Session.user_id == user_id)
+    )
     completed_by_ex: dict[int, int] = {}
     if sess is not None:
         rows = (
@@ -104,7 +109,7 @@ async def _workout_block(
 
     # Last-week numbers for every exercise in one query, computed server-side so the
     # frontend no longer fires a request per exercise (the old N+1 + slow-load bug).
-    last_weeks = await last_week_for_exercises(session, exercise_ids, day)
+    last_weeks = await last_week_for_exercises(session, exercise_ids, day, user_id)
 
     lines = [
         ExerciseLine(
@@ -121,9 +126,9 @@ async def _workout_block(
     return WorkoutBlock(label=td.label, exercises=lines)
 
 
-async def resolve_day(session: AsyncSession, day: date) -> DailyView:
+async def resolve_day(session: AsyncSession, day: date, user_id: int) -> DailyView:
     weekday = day.strftime("%A").lower()
-    plan = await _current_plan(session)
+    plan = await _current_plan(session, user_id)
 
     workout: WorkoutBlock | None = None
     mobility: list[MobilityItem] | None = None
@@ -132,10 +137,10 @@ async def resolve_day(session: AsyncSession, day: date) -> DailyView:
     targets: dict[str, float | int | None] = {}
 
     if plan is not None:
-        workout = await _workout_block(session, plan, weekday, day)
+        workout = await _workout_block(session, plan, weekday, day, user_id)
         # Show a mobility section on workout days.
         if workout is not None:
-            mobility = await _mobility_for(session, day)
+            mobility = await _mobility_for(session, day, user_id)
         plan_meals = (
             (
                 await session.execute(
@@ -149,7 +154,9 @@ async def resolve_day(session: AsyncSession, day: date) -> DailyView:
             (
                 await session.execute(
                     select(MealCheck.meal_id).where(
-                        MealCheck.date == day, MealCheck.eaten.is_(True)
+                        MealCheck.date == day,
+                        MealCheck.eaten.is_(True),
+                        MealCheck.user_id == user_id,
                     )
                 )
             )
@@ -178,9 +185,15 @@ async def resolve_day(session: AsyncSession, day: date) -> DailyView:
             "electrolytes_per_day": plan.electrolytes_per_day,
         }
 
-    steps_row = await session.scalar(select(StepsDay).where(StepsDay.date == day))
-    wb = await session.scalar(select(DailyWellbeing).where(DailyWellbeing.date == day))
-    log = await session.scalar(select(DailyLog).where(DailyLog.date == day))
+    steps_row = await session.scalar(
+        select(StepsDay).where(StepsDay.date == day, StepsDay.user_id == user_id)
+    )
+    wb = await session.scalar(
+        select(DailyWellbeing).where(DailyWellbeing.date == day, DailyWellbeing.user_id == user_id)
+    )
+    log = await session.scalar(
+        select(DailyLog).where(DailyLog.date == day, DailyLog.user_id == user_id)
+    )
 
     return DailyView(
         date=day,

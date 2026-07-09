@@ -2,17 +2,18 @@
 
 from datetime import date, datetime
 
-from sqlalchemy import JSON, Date, DateTime
+from sqlalchemy import JSON, Date, DateTime, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
-from app.models.base import Base, TimestampMixin
+from app.models.base import Base, OwnedMixin, TimestampMixin
 
 
-class StepsDay(Base, TimestampMixin):
+class StepsDay(OwnedMixin, Base, TimestampMixin):
     __tablename__ = "steps_day"
+    __table_args__ = (UniqueConstraint("user_id", "date", name="uq_steps_day_user_date"),)
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    date: Mapped[date] = mapped_column(Date, unique=True, index=True)
+    date: Mapped[date] = mapped_column(Date, index=True)
     steps: Mapped[int] = mapped_column(default=0)
     target_steps: Mapped[int | None] = mapped_column(default=None)
     target_met: Mapped[bool] = mapped_column(default=False)
@@ -21,11 +22,12 @@ class StepsDay(Base, TimestampMixin):
     fetched_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
 
 
-class SleepNight(Base, TimestampMixin):
+class SleepNight(OwnedMixin, Base, TimestampMixin):
     __tablename__ = "sleep_night"
+    __table_args__ = (UniqueConstraint("user_id", "date", name="uq_sleep_night_user_date"),)
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    date: Mapped[date] = mapped_column(Date, unique=True, index=True)
+    date: Mapped[date] = mapped_column(Date, index=True)
     bedtime: Mapped[str | None] = mapped_column(default=None)  # HH:MM
     wake_time: Mapped[str | None] = mapped_column(default=None)
     asleep_min: Mapped[float | None] = mapped_column(default=None)
@@ -44,8 +46,8 @@ class SleepNight(Base, TimestampMixin):
     fetched_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
 
 
-class GlucoseReading(Base, TimestampMixin):
-    """Dexcom CGM reading, pulled via Tidepool. Seth's own record (not in PT package)."""
+class GlucoseReading(OwnedMixin, Base, TimestampMixin):
+    """Dexcom CGM reading, pulled via Tidepool. Owner-only (has_diabetes)."""
 
     __tablename__ = "glucose_reading"
 
@@ -55,7 +57,7 @@ class GlucoseReading(Base, TimestampMixin):
     source: Mapped[str] = mapped_column(default="tidepool")
 
 
-class InsulinEvent(Base, TimestampMixin):
+class InsulinEvent(OwnedMixin, Base, TimestampMixin):
     """Tandem pump event (basal/bolus), pulled via Tidepool after a manual uploader run."""
 
     __tablename__ = "insulin_event"

@@ -3,13 +3,15 @@
 from datetime import date
 
 from httpx import AsyncClient
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models import Meal, MealIngredient, Plan
+from app.models import Meal, MealIngredient, Plan, User
 
 
 async def _seed(session: AsyncSession) -> None:
-    plan = Plan(start_date=date(2026, 5, 21), is_current=True)
+    uid = int(await session.scalar(select(User.id).order_by(User.id).limit(1)))
+    plan = Plan(user_id=uid, start_date=date(2026, 5, 21), is_current=True)
     session.add(plan)
     await session.flush()
     m1 = Meal(plan_id=plan.id, meal_number=1, slot="lunch", name="Chicken rice")

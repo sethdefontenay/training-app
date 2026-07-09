@@ -18,13 +18,19 @@ from app.services.shopping import generate_for_plan
 from app.services.workouts import get_or_create_exercise
 
 
-async def commit_plan(session: AsyncSession, proposed: ProposedPlan, start_date: date) -> Plan:
-    # Archive whatever is current — kept, just no longer active.
-    current = await session.scalar(select(Plan).where(Plan.is_current.is_(True)))
+async def commit_plan(
+    session: AsyncSession, proposed: ProposedPlan, start_date: date, user_id: int
+) -> Plan:
+    # Archive whatever is current for THIS user — kept, just no longer active. Scoped so
+    # committing one user's plan never flips another user's current plan.
+    current = await session.scalar(
+        select(Plan).where(Plan.is_current.is_(True), Plan.user_id == user_id)
+    )
     if current is not None:
         current.is_current = False
 
     plan = Plan(
+        user_id=user_id,
         start_date=start_date,
         is_current=True,
         source=proposed.source,
@@ -56,7 +62,7 @@ async def commit_plan(session: AsyncSession, proposed: ProposedPlan, start_date:
                 )
             )
         for pr in td.prescriptions:
-            ex = await get_or_create_exercise(session, pr.exercise_slug)
+            ex = await get_or_create_exercise(session, pr.exercise_slug, user_id)
             ex.name = pr.exercise_name
             ex.is_bodyweight = pr.is_bodyweight
             session.add(
@@ -89,5 +95,5 @@ async def commit_plan(session: AsyncSession, proposed: ProposedPlan, start_date:
 
     await session.commit()
     # Derived output: a fresh weekly shopping list from the new plan's meals.
-    await generate_for_plan(session, plan, start_date)
+    await generate_for_plan(session, plan, start_date, user_id)
     return plan

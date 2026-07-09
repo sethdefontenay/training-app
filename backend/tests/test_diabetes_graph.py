@@ -9,14 +9,19 @@ from datetime import UTC, date, datetime
 from zoneinfo import ZoneInfo
 
 from httpx import AsyncClient
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings
-from app.models import Exercise, GlucoseReading, InsulinEvent, MealCheck, Session, SetEntry
+from app.models import Exercise, GlucoseReading, InsulinEvent, MealCheck, Session, SetEntry, User
 from tests.test_daily import _seed_plan
 
 DAY = date(2026, 5, 25)
 _TZ = ZoneInfo(get_settings().timezone)
+
+
+async def _uid(session: AsyncSession) -> int:
+    return int(await session.scalar(select(User.id).order_by(User.id).limit(1)))
 
 
 def _utc(day: date, hour: int, minute: int = 0) -> datetime:
@@ -27,8 +32,9 @@ def _utc(day: date, hour: int, minute: int = 0) -> datetime:
 
 async def test_daily_iob_curve_from_bolus(auth_client: AsyncClient, session: AsyncSession) -> None:
     # 5 U bolus at local noon, glucose 8.0 at 12:05.
-    session.add(InsulinEvent(ts=_utc(DAY, 12), kind="bolus", units=5.0))
-    session.add(GlucoseReading(ts=_utc(DAY, 12, 5), mmol_l=8.0))
+    uid = await _uid(session)
+    session.add(InsulinEvent(user_id=uid, ts=_utc(DAY, 12), kind="bolus", units=5.0))
+    session.add(GlucoseReading(user_id=uid, ts=_utc(DAY, 12, 5), mmol_l=8.0))
     await session.commit()
 
     body = (
@@ -50,8 +56,11 @@ async def test_daily_meal_and_workout_markers(
     auth_client: AsyncClient, session: AsyncSession
 ) -> None:
     meal = await _seed_plan(session)
-    session.add(MealCheck(date=DAY, meal_id=meal.id, eaten=True, checked_at=_utc(DAY, 12, 30)))
-    sess = Session(date=DAY, weekday=DAY.strftime("%A"))
+    uid = await _uid(session)
+    session.add(
+        MealCheck(user_id=uid, date=DAY, meal_id=meal.id, eaten=True, checked_at=_utc(DAY, 12, 30))
+    )
+    sess = Session(user_id=uid, date=DAY, weekday=DAY.strftime("%A"))
     session.add(sess)
     await session.flush()
     ex = Exercise(slug="squat", name="Squat")
@@ -82,8 +91,9 @@ async def test_daily_meal_and_workout_markers(
 
 
 async def test_weekly_trend_daily_averages(auth_client: AsyncClient, session: AsyncSession) -> None:
-    session.add(GlucoseReading(ts=_utc(DAY, 9), mmol_l=5.0))
-    session.add(GlucoseReading(ts=_utc(DAY, 10), mmol_l=11.0))  # avg 8.0, one in-range
+    uid = await _uid(session)
+    session.add(GlucoseReading(user_id=uid, ts=_utc(DAY, 9), mmol_l=5.0))
+    session.add(GlucoseReading(user_id=uid, ts=_utc(DAY, 10), mmol_l=11.0))  # avg 8.0, one in-range
     await session.commit()
 
     body = (

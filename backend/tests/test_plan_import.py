@@ -15,6 +15,7 @@ from app.models import (
     Prescription,
     ShoppingItem,
     TrainingDay,
+    User,
     WeekdaySchedule,
 )
 
@@ -83,9 +84,9 @@ def _build_plan_vault(root: Path) -> Path:
     return v
 
 
-async def test_full_plan_import(tmp_path: Path, session: AsyncSession) -> None:
+async def test_full_plan_import(tmp_path: Path, session: AsyncSession, user: User) -> None:
     vault = _build_plan_vault(tmp_path)
-    await import_vault(session, vault)
+    await import_vault(session, vault, user.id)
 
     plan = await session.scalar(select(Plan).where(Plan.is_current.is_(True)))
     assert plan is not None
@@ -121,8 +122,8 @@ async def test_full_plan_import(tmp_path: Path, session: AsyncSession) -> None:
     assert oats_item is not None and oats_item.quantity == 80 * 7
 
 
-async def test_plan_import_is_idempotent(tmp_path: Path, session: AsyncSession) -> None:
+async def test_plan_import_is_idempotent(tmp_path: Path, session: AsyncSession, user: User) -> None:
     vault = _build_plan_vault(tmp_path)
-    await import_vault(session, vault)
-    await import_vault(session, vault)
+    await import_vault(session, vault, user.id)
+    await import_vault(session, vault, user.id)
     assert (await session.scalar(select(func.count()).select_from(Plan))) == 1

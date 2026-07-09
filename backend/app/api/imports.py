@@ -53,5 +53,5 @@ async def import_vault_zip(
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST, detail="Not a valid zip file"
             ) from e
-        summary = await import_vault(session, _find_vault_root(extract_dir))
+        summary = await import_vault(session, _find_vault_root(extract_dir), user.id)
     return {"counts": summary.counts, "failures": summary.failures}

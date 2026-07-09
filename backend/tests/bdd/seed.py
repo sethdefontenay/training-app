@@ -8,6 +8,7 @@ Sessions, sets, mobility ticks and meal checks are seeded via the API in the ste
 from datetime import date, datetime
 from zoneinfo import ZoneInfo
 
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import (
@@ -22,8 +23,15 @@ from app.models import (
     SleepNight,
     StepsDay,
     TrainingDay,
+    User,
     WeekdaySchedule,
 )
+
+
+async def _owner_id(session: AsyncSession) -> int:
+    """The BDD owner's id (seeded first in bdd_env, so it has the lowest id)."""
+    return int(await session.scalar(select(User.id).order_by(User.id).limit(1)))
+
 
 # Canonical exercise catalog (slug -> (name, is_bodyweight)).
 _EXERCISES = {
@@ -90,6 +98,7 @@ async def full_plan(session: AsyncSession, start: date = date(2026, 5, 21)) -> P
     """
     ex = await _exercises(session)
     plan = Plan(
+        user_id=await _owner_id(session),
         is_current=True,
         start_date=start,
         phase=1,
@@ -161,7 +170,15 @@ async def full_plan(session: AsyncSession, start: date = date(2026, 5, 21)) -> P
 
 
 async def add_steps(session: AsyncSession, day: date, steps: int, target: int = 7000) -> None:
-    session.add(StepsDay(date=day, steps=steps, target_steps=target, target_met=steps >= target))
+    session.add(
+        StepsDay(
+            user_id=await _owner_id(session),
+            date=day,
+            steps=steps,
+            target_steps=target,
+            target_met=steps >= target,
+        )
+    )
 
 
 async def add_sleep(session: AsyncSession, day: date, *, with_stages: bool = True) -> None:
@@ -176,6 +193,7 @@ async def add_sleep(session: AsyncSession, day: date, *, with_stages: bool = Tru
     )
     session.add(
         SleepNight(
+            user_id=await _owner_id(session),
             date=day,
             bedtime="22:30",
             wake_time="07:00",
@@ -198,13 +216,21 @@ def _nz(day: date, hour: int, minute: int = 0) -> datetime:
 
 
 async def add_glucose(session: AsyncSession, day: date, hour: int, mmol: float) -> None:
-    session.add(GlucoseReading(ts=_nz(day, hour), mmol_l=mmol))
+    session.add(GlucoseReading(user_id=await _owner_id(session), ts=_nz(day, hour), mmol_l=mmol))
 
 
 async def add_insulin(
     session: AsyncSession, day: date, hour: int, units: float, carbs: float | None = None
 ) -> None:
-    session.add(InsulinEvent(ts=_nz(day, hour), kind="bolus", units=units, carbs_g=carbs))
+    session.add(
+        InsulinEvent(
+            user_id=await _owner_id(session),
+            ts=_nz(day, hour),
+            kind="bolus",
+            units=units,
+            carbs_g=carbs,
+        )
+    )
 
 
 async def set_integration(session: AsyncSession, key: str, value: str) -> None:

@@ -30,7 +30,7 @@ from app.integrations.health import (
 )
 from app.main import app
 from app.models import StepsDay
-from tests.bdd.seed import add_sleep, add_steps
+from tests.bdd.seed import _owner_id, add_sleep, add_steps
 
 scenarios("health_sync_steps_sleep.feature")
 
@@ -296,7 +296,15 @@ def _enter_manually(seed, context: dict, steps: str, d: str) -> None:
     context["manual_steps"] = steps_int
 
     async def _seed_manual(s):
-        s.add(StepsDay(date=day, steps=steps_int, target_steps=7000, manual=True))
+        s.add(
+            StepsDay(
+                user_id=await _owner_id(s),
+                date=day,
+                steps=steps_int,
+                target_steps=7000,
+                manual=True,
+            )
+        )
 
     seed(_seed_manual)
 

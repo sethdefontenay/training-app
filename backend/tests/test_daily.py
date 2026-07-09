@@ -15,6 +15,7 @@ from app.models import (
     SetEntry,
     StepsDay,
     TrainingDay,
+    User,
     WeekdaySchedule,
 )
 
@@ -22,8 +23,13 @@ TRAIN = date(2026, 5, 25)
 REST = date(2026, 5, 26)  # different weekday with no schedule entry
 
 
+async def _owner_id(session: AsyncSession) -> int:
+    return int(await session.scalar(select(User.id).order_by(User.id).limit(1)))
+
+
 async def _seed_plan(session: AsyncSession) -> Meal:
     plan = Plan(
+        user_id=await _owner_id(session),
         start_date=date(2026, 5, 21),
         is_current=True,
         steps_target=7000,
@@ -160,7 +166,7 @@ async def test_workout_progress_from_logged_sets(
 ) -> None:
     await _seed_plan(session)
     ex = await session.scalar(select(Exercise).where(Exercise.slug == "leg-press-machine"))
-    s = Session(date=TRAIN, weekday=TRAIN.strftime("%A"))
+    s = Session(user_id=await _owner_id(session), date=TRAIN, weekday=TRAIN.strftime("%A"))
     session.add(s)
     await session.flush()
     for i in (1, 2):
@@ -175,7 +181,9 @@ async def test_workout_progress_from_logged_sets(
 
 async def test_steps_progress_from_sync(auth_client: AsyncClient, session: AsyncSession) -> None:
     await _seed_plan(session)
-    session.add(StepsDay(date=TRAIN, steps=4200, target_steps=7000))
+    session.add(
+        StepsDay(user_id=await _owner_id(session), date=TRAIN, steps=4200, target_steps=7000)
+    )
     await session.commit()
     view = (await auth_client.get(f"/api/v1/daily/{TRAIN.isoformat()}")).json()
     assert view["steps"]["steps"] == 4200

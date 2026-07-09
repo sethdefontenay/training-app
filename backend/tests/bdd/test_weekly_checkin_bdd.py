@@ -18,7 +18,7 @@ from pytest_bdd import given, parsers, scenarios, then, when
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import Session
-from tests.bdd.seed import add_glucose, add_insulin, add_sleep, add_steps
+from tests.bdd.seed import _owner_id, add_glucose, add_insulin, add_sleep, add_steps
 
 scenarios("weekly_checkin.feature")
 
@@ -381,7 +381,13 @@ def _past_photos_viewable(context: dict[str, object]) -> None:
 def _sessions_context(bdd_client: TestClient, context: dict[str, object], seed: SeedRunner) -> None:
     # sessions_logged counts Session rows in the window; seed two, re-fetch, assert.
     async def _seed(s: AsyncSession) -> None:
-        s.add_all([Session(date=date(2026, 5, 20)), Session(date=date(2026, 5, 23))])
+        uid = await _owner_id(s)
+        s.add_all(
+            [
+                Session(user_id=uid, date=date(2026, 5, 20)),
+                Session(user_id=uid, date=date(2026, 5, 23)),
+            ]
+        )
 
     seed(_seed)
     view: dict[str, Any] = bdd_client.get(f"{_CI}/{context['check_in_id']}").json()

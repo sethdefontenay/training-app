@@ -46,7 +46,7 @@ async def sync_health(
     end = local_today()
     start = end - timedelta(days=days - 1)
     try:
-        result = await sync_steps_sleep(session, provider, start, end)
+        result = await sync_steps_sleep(session, provider, start, end, user.id)
     except IntegrationAuthExpired as e:
         # Flag the dead token so the app can surface a reconnect prompt. Cleared on
         # the next successful sync or when the OAuth callback stores a fresh token.

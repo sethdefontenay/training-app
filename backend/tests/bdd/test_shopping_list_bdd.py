@@ -12,7 +12,7 @@ from pytest_bdd import given, parsers, scenarios, then, when
 from sqlalchemy import delete, select
 
 from app.models import Meal, MealIngredient, Plan
-from tests.bdd.seed import full_plan
+from tests.bdd.seed import _owner_id, full_plan
 
 scenarios("shopping_list.feature")
 
@@ -38,7 +38,7 @@ async def _reset_plans(session) -> None:
 async def _chicken_plan(session) -> Plan:
     """A fresh current plan whose two meals both use 'cooked chicken' (100 g + 150 g)."""
     await _reset_plans(session)
-    plan = Plan(is_current=True, start_date=_START, phase=1)
+    plan = Plan(user_id=await _owner_id(session), is_current=True, start_date=_START, phase=1)
     session.add(plan)
     await session.flush()
     for num, slot, qty in ((1, "lunch", 100.0), (2, "dinner", 150.0)):
@@ -63,7 +63,7 @@ async def _add_ingredient(session, name: str, qty: float, unit: str) -> None:
 async def _new_meals_plan(session) -> Plan:
     """A fresh current plan with different ingredients than full_plan."""
     await _reset_plans(session)
-    plan = Plan(is_current=True, start_date=_START, phase=2)
+    plan = Plan(user_id=await _owner_id(session), is_current=True, start_date=_START, phase=2)
     session.add(plan)
     await session.flush()
     meal = Meal(plan_id=plan.id, meal_number=1, slot="breakfast", name="New breakfast")

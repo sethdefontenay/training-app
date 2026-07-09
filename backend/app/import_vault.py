@@ -8,13 +8,22 @@ import asyncio
 import sys
 from pathlib import Path
 
+from sqlalchemy import select
+
 from app.database import SessionLocal
 from app.importer import import_vault
+from app.models import User
 
 
 async def _run(path: str) -> None:
     async with SessionLocal() as session:
-        summary = await import_vault(session, Path(path))
+        owner = await session.scalar(
+            select(User).where(User.is_admin.is_(True)).order_by(User.id).limit(1)
+        )
+        if owner is None:
+            print("No admin user found — seed the owner account before importing.")
+            raise SystemExit(1)
+        summary = await import_vault(session, Path(path), owner.id)
     print("Imported:", summary.counts)
     if summary.failures:
         print(f"\n{len(summary.failures)} file(s) need attention:")

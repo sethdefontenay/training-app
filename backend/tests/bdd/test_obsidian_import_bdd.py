@@ -14,8 +14,14 @@ from sqlalchemy import select
 
 from app.importer import import_vault
 from app.models import Session as WorkoutSession
+from tests.bdd.seed import _owner_id
 
 scenarios("obsidian_import.feature")
+
+
+async def _do_import(s, root):
+    """Run the importer as the seeded owner (resolved from the DB)."""
+    return await import_vault(s, root, await _owner_id(s))
 
 
 # --- vault construction ----------------------------------------------------
@@ -137,7 +143,7 @@ def _vault_available(context: dict) -> None:
 
 def _run_import(seed, context: dict) -> None:
     root = context["vault"]
-    context["summary"] = seed(lambda s: import_vault(s, root))
+    context["summary"] = seed(lambda s: _do_import(s, root))
 
 
 @when("I run the import")
@@ -225,7 +231,7 @@ def _already_imported(seed, context: dict) -> None:
 @when("I run the import again")
 def _import_again(seed, context: dict) -> None:
     # Re-run against the same vault.
-    context["summary_second"] = seed(lambda s: import_vault(s, context["vault"]))
+    context["summary_second"] = seed(lambda s: _do_import(s, context["vault"]))
 
 
 @then("no duplicate records are created")
@@ -252,7 +258,7 @@ def _updated_in_place(seed, context: dict, bdd_client: TestClient) -> None:
         context["vault"] / "Measurements" / f"{MEAS_DATE}.md",
         f"---\ndate: {MEAS_DATE}\nweight_kg: 80.0\nwaist_cm: 95\n---\n",
     )
-    seed(lambda s: import_vault(s, context["vault"]))
+    seed(lambda s: _do_import(s, context["vault"]))
     meas = bdd_client.get("/api/v1/measurements").json()
     rows = [r for r in meas if r["date"] == MEAS_DATE]
     assert len(rows) == 1

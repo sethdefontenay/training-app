@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 
-from app.api.deps import CurrentUser, SessionDep
+from app.api.deps import CurrentUser, SessionDep, owned
 from app.clock import local_today
 from app.integrations.health import IntegrationNotConfigured
 from app.integrations.ingest import (
@@ -76,7 +76,7 @@ async def ingest_from_gmail(user: CurrentUser, agent: AgentDep, gmail: GmailDep)
 
 @router.post("/commit", status_code=status.HTTP_201_CREATED)
 async def commit(body: CommitRequest, session: SessionDep, user: CurrentUser) -> dict[str, int]:
-    plan = await commit_plan(session, body.plan, body.start_date)
+    plan = await commit_plan(session, body.plan, body.start_date, user.id)
     return {"plan_id": plan.id}
 
 
@@ -84,7 +84,7 @@ async def commit(body: CommitRequest, session: SessionDep, user: CurrentUser) ->
 async def current_detail(session: SessionDep, user: CurrentUser) -> dict[str, object]:
     """Aggregated view of the active plan: training days, meals, mobility, time since start."""
     plan = await session.scalar(
-        select(Plan)
+        owned(select(Plan), Plan, user)
         .where(Plan.is_current.is_(True))
         .options(
             selectinload(Plan.training_days)
@@ -137,6 +137,7 @@ async def current_detail(session: SessionDep, user: CurrentUser) -> dict[str, ob
             await session.execute(
                 select(Exercise.name)
                 .join(MobilityDone, MobilityDone.exercise_id == Exercise.id)
+                .where(MobilityDone.user_id == user.id)
                 .distinct()
                 .order_by(Exercise.name)
             )
@@ -168,7 +169,11 @@ async def current_detail(session: SessionDep, user: CurrentUser) -> dict[str, ob
 
 @router.get("")
 async def list_plans(session: SessionDep, user: CurrentUser) -> list[dict[str, object]]:
-    rows = (await session.execute(select(Plan).order_by(Plan.start_date.desc()))).scalars().all()
+    rows = (
+        (await session.execute(owned(select(Plan), Plan, user).order_by(Plan.start_date.desc())))
+        .scalars()
+        .all()
+    )
     return [
         {
             "id": p.id,

@@ -5,7 +5,7 @@ from datetime import UTC, date, datetime
 from fastapi import APIRouter, status
 from sqlalchemy import select
 
-from app.api.deps import CurrentUser, SessionDep
+from app.api.deps import CurrentUser, SessionDep, owned
 from app.models import DailyLog, DailyWellbeing, MealCheck
 from app.schemas.daily import DailyLogIn, DailyView, WellbeingIn
 from app.services.daily import resolve_day
@@ -15,16 +15,18 @@ router = APIRouter(prefix="/daily", tags=["daily"])
 
 @router.get("/{day}", response_model=DailyView)
 async def get_day(day: date, session: SessionDep, user: CurrentUser) -> DailyView:
-    return await resolve_day(session, day)
+    return await resolve_day(session, day, user.id)
 
 
 @router.put("/{day}/wellbeing", response_model=WellbeingIn)
 async def set_wellbeing(
     day: date, body: WellbeingIn, session: SessionDep, user: CurrentUser
 ) -> WellbeingIn:
-    row = await session.scalar(select(DailyWellbeing).where(DailyWellbeing.date == day))
+    row = await session.scalar(
+        owned(select(DailyWellbeing), DailyWellbeing, user).where(DailyWellbeing.date == day)
+    )
     if row is None:
-        row = DailyWellbeing(date=day)
+        row = DailyWellbeing(user_id=user.id, date=day)
         session.add(row)
     for field in ("energy", "motivation", "stress", "hunger"):
         value = getattr(body, field)
@@ -41,9 +43,9 @@ async def set_wellbeing(
 async def set_log(
     day: date, body: DailyLogIn, session: SessionDep, user: CurrentUser
 ) -> DailyLogIn:
-    row = await session.scalar(select(DailyLog).where(DailyLog.date == day))
+    row = await session.scalar(owned(select(DailyLog), DailyLog, user).where(DailyLog.date == day))
     if row is None:
-        row = DailyLog(date=day)
+        row = DailyLog(user_id=user.id, date=day)
         session.add(row)
     if body.water_units is not None:
         row.water_units = body.water_units
@@ -63,11 +65,15 @@ async def check_meal(
     day: date, meal_id: int, session: SessionDep, user: CurrentUser
 ) -> dict[str, bool]:
     existing = await session.scalar(
-        select(MealCheck).where(MealCheck.date == day, MealCheck.meal_id == meal_id)
+        owned(select(MealCheck), MealCheck, user).where(
+            MealCheck.date == day, MealCheck.meal_id == meal_id
+        )
     )
     now = datetime.now(UTC)
     if existing is None:
-        session.add(MealCheck(date=day, meal_id=meal_id, eaten=True, checked_at=now))
+        session.add(
+            MealCheck(user_id=user.id, date=day, meal_id=meal_id, eaten=True, checked_at=now)
+        )
     else:
         existing.eaten = True
         existing.checked_at = now
@@ -80,7 +86,9 @@ async def uncheck_meal(
     day: date, meal_id: int, session: SessionDep, user: CurrentUser
 ) -> dict[str, bool]:
     existing = await session.scalar(
-        select(MealCheck).where(MealCheck.date == day, MealCheck.meal_id == meal_id)
+        owned(select(MealCheck), MealCheck, user).where(
+            MealCheck.date == day, MealCheck.meal_id == meal_id
+        )
     )
     if existing is not None:
         await session.delete(existing)

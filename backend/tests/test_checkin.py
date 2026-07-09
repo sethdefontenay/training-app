@@ -5,11 +5,16 @@ from pathlib import Path
 
 import pytest
 from httpx import AsyncClient
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models import DailyWellbeing, Measurement, SleepNight, StepsDay
+from app.models import DailyWellbeing, Measurement, SleepNight, StepsDay, User
 
 START = "2026-05-25"
+
+
+async def _uid(session: AsyncSession) -> int:
+    return int(await session.scalar(select(User.id).order_by(User.id).limit(1)))
 
 
 async def test_start_uses_rolling_7_day_window(auth_client: AsyncClient) -> None:
@@ -21,11 +26,12 @@ async def test_start_uses_rolling_7_day_window(auth_client: AsyncClient) -> None
 async def test_metrics_summarise_logged_days_only(
     auth_client: AsyncClient, session: AsyncSession
 ) -> None:
+    uid = await _uid(session)
     session.add_all(
         [
-            DailyWellbeing(date=date(2026, 5, 19), energy=6),
-            DailyWellbeing(date=date(2026, 5, 20), energy=7),
-            DailyWellbeing(date=date(2026, 5, 21), energy=8),
+            DailyWellbeing(user_id=uid, date=date(2026, 5, 19), energy=6),
+            DailyWellbeing(user_id=uid, date=date(2026, 5, 20), energy=7),
+            DailyWellbeing(user_id=uid, date=date(2026, 5, 21), energy=8),
             # 05-22..25 not logged -> must not count as zero
         ]
     )
@@ -37,7 +43,7 @@ async def test_metrics_summarise_logged_days_only(
 
 
 async def test_measurements_prefill(auth_client: AsyncClient, session: AsyncSession) -> None:
-    session.add(Measurement(date=date(2026, 5, 25), waist_cm=96))
+    session.add(Measurement(user_id=await _uid(session), date=date(2026, 5, 25), waist_cm=96))
     await session.commit()
     ci = (await auth_client.post("/api/v1/check-ins", json={"started_on": START})).json()
     assert ci["measurements"]["waist_cm"] == 96
@@ -46,12 +52,13 @@ async def test_measurements_prefill(auth_client: AsyncClient, session: AsyncSess
 async def test_checkin_includes_steps_sleep_and_latest_measurements(
     auth_client: AsyncClient, session: AsyncSession
 ) -> None:
+    uid = await _uid(session)
     session.add_all(
         [
-            StepsDay(date=date(2026, 5, 24), steps=6000),
-            StepsDay(date=date(2026, 5, 25), steps=8000),
-            SleepNight(date=date(2026, 5, 25), asleep_min=472.0, efficiency=98.0),
-            Measurement(date=date(2026, 5, 20), waist_cm=96, weight_kg=94),
+            StepsDay(user_id=uid, date=date(2026, 5, 24), steps=6000),
+            StepsDay(user_id=uid, date=date(2026, 5, 25), steps=8000),
+            SleepNight(user_id=uid, date=date(2026, 5, 25), asleep_min=472.0, efficiency=98.0),
+            Measurement(user_id=uid, date=date(2026, 5, 20), waist_cm=96, weight_kg=94),
         ]
     )
     await session.commit()

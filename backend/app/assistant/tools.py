@@ -36,7 +36,7 @@ from app.services.daily import resolve_day
 from app.services.workouts import get_or_create_exercise, list_sessions, progress_series
 
 JSON = dict[str, object]
-Handler = Callable[[AsyncSession, JSON], Awaitable[object]]
+Handler = Callable[[AsyncSession, JSON, int], Awaitable[object]]
 
 
 @dataclass
@@ -83,8 +83,8 @@ _EMPTY: JSON = {"type": "object", "properties": {}}
     "wellbeing scores, steps. Use for 'what's on today', adherence, etc.",
     {"type": "object", "properties": {"date": _DATE_PROP}},
 )
-async def _get_today(session: AsyncSession, args: JSON) -> object:
-    return (await resolve_day(session, _day(args))).model_dump(mode="json")
+async def _get_today(session: AsyncSession, args: JSON, user_id: int) -> object:
+    return (await resolve_day(session, _day(args), user_id)).model_dump(mode="json")
 
 
 @tool(
@@ -93,10 +93,10 @@ async def _get_today(session: AsyncSession, args: JSON) -> object:
     "targets (calories/macros/steps/water), phase, and days since it started.",
     _EMPTY,
 )
-async def _get_plan(session: AsyncSession, args: JSON) -> object:
+async def _get_plan(session: AsyncSession, args: JSON, user_id: int) -> object:
     plan = await session.scalar(
         select(Plan)
-        .where(Plan.is_current.is_(True))
+        .where(Plan.is_current.is_(True), Plan.user_id == user_id)
         .options(
             selectinload(Plan.training_days)
             .selectinload(TrainingDay.prescriptions)
@@ -140,14 +140,14 @@ async def _get_plan(session: AsyncSession, args: JSON) -> object:
     "event count over the last N days (default 7).",
     {"type": "object", "properties": {"days": {"type": "integer", "description": "default 7"}}},
 )
-async def _get_glucose_summary(session: AsyncSession, args: JSON) -> object:
+async def _get_glucose_summary(session: AsyncSession, args: JSON, user_id: int) -> object:
     days = int(str(args.get("days", 7)))
     end = local_today()
     start = end - timedelta(days=days - 1)
     return {
         "window": {"start": start.isoformat(), "end": end.isoformat()},
-        "glucose": await glucose_summary(session, start, end),
-        "insulin_events": await insulin_count(session, start, end),
+        "glucose": await glucose_summary(session, start, end, user_id),
+        "insulin_events": await insulin_count(session, start, end, user_id),
     }
 
 
@@ -157,7 +157,7 @@ async def _get_glucose_summary(session: AsyncSession, args: JSON) -> object:
     "time — useful for 'what was my BG around lunch'.",
     {"type": "object", "properties": {"date": _DATE_PROP}},
 )
-async def _get_glucose_by_hour(session: AsyncSession, args: JSON) -> object:
+async def _get_glucose_by_hour(session: AsyncSession, args: JSON, user_id: int) -> object:
     day = _day(args)
     tz = _tz()
     lo = datetime.combine(day, datetime.min.time(), tzinfo=tz).astimezone(ZoneInfo("UTC"))
@@ -167,6 +167,7 @@ async def _get_glucose_by_hour(session: AsyncSession, args: JSON) -> object:
             select(GlucoseReading.ts, GlucoseReading.mmol_l).where(
                 GlucoseReading.ts >= lo.replace(tzinfo=None),
                 GlucoseReading.ts < hi.replace(tzinfo=None),
+                GlucoseReading.user_id == user_id,
             )
         )
     ).all()
@@ -190,8 +191,8 @@ async def _get_glucose_by_hour(session: AsyncSession, args: JSON) -> object:
     "Logged workout sessions (most recent first), each with its exercises and sets.",
     _EMPTY,
 )
-async def _get_workout_history(session: AsyncSession, args: JSON) -> object:
-    return await list_sessions(session)
+async def _get_workout_history(session: AsyncSession, args: JSON, user_id: int) -> object:
+    return await list_sessions(session, user_id)
 
 
 @tool(
@@ -200,8 +201,8 @@ async def _get_workout_history(session: AsyncSession, args: JSON) -> object:
     "weight, or reps for bodyweight). Use the exercise slug from get_plan.",
     {"type": "object", "properties": {"slug": {"type": "string"}}, "required": ["slug"]},
 )
-async def _get_exercise_progress(session: AsyncSession, args: JSON) -> object:
-    result = await progress_series(session, str(args["slug"]))
+async def _get_exercise_progress(session: AsyncSession, args: JSON, user_id: int) -> object:
+    result = await progress_series(session, str(args["slug"]), user_id)
     if result is None:
         return {"error": "unknown exercise slug"}
     name, metric, points = result
@@ -213,10 +214,15 @@ async def _get_exercise_progress(session: AsyncSession, args: JSON) -> object:
     "Recent body measurements (waist, weight, etc.), newest first.",
     {"type": "object", "properties": {"limit": {"type": "integer", "description": "default 10"}}},
 )
-async def _get_measurements(session: AsyncSession, args: JSON) -> object:
+async def _get_measurements(session: AsyncSession, args: JSON, user_id: int) -> object:
     limit = int(str(args.get("limit", 10)))
     rows = (
-        await session.scalars(select(Measurement).order_by(Measurement.date.desc()).limit(limit))
+        await session.scalars(
+            select(Measurement)
+            .where(Measurement.user_id == user_id)
+            .order_by(Measurement.date.desc())
+            .limit(limit)
+        )
     ).all()
     return [
         {"date": r.date.isoformat(), **{f: getattr(r, f) for f in _MEASUREMENT_FIELDS}}
@@ -229,21 +235,21 @@ async def _get_measurements(session: AsyncSession, args: JSON) -> object:
     "Daily steps and sleep (asleep minutes, efficiency) over the last N days (default 7).",
     {"type": "object", "properties": {"days": {"type": "integer", "description": "default 7"}}},
 )
-async def _get_steps_sleep(session: AsyncSession, args: JSON) -> object:
+async def _get_steps_sleep(session: AsyncSession, args: JSON, user_id: int) -> object:
     days = int(str(args.get("days", 7)))
     end = local_today()
     start = end - timedelta(days=days - 1)
     steps = (
         await session.execute(
             select(StepsDay.date, StepsDay.steps, StepsDay.target_steps)
-            .where(StepsDay.date >= start, StepsDay.date <= end)
+            .where(StepsDay.date >= start, StepsDay.date <= end, StepsDay.user_id == user_id)
             .order_by(StepsDay.date)
         )
     ).all()
     sleep = (
         await session.execute(
             select(SleepNight.date, SleepNight.asleep_min, SleepNight.efficiency)
-            .where(SleepNight.date >= start, SleepNight.date <= end)
+            .where(SleepNight.date >= start, SleepNight.date <= end, SleepNight.user_id == user_id)
             .order_by(SleepNight.date)
         )
     ).all()
@@ -272,14 +278,16 @@ async def _get_steps_sleep(session: AsyncSession, args: JSON) -> object:
     },
     writes=True,
 )
-async def _log_set(session: AsyncSession, args: JSON) -> object:
+async def _log_set(session: AsyncSession, args: JSON, user_id: int) -> object:
     day = _day(args)
-    sess = await session.scalar(select(Session).where(Session.date == day))
+    sess = await session.scalar(
+        select(Session).where(Session.date == day, Session.user_id == user_id)
+    )
     if sess is None:
-        sess = Session(date=day, weekday=day.strftime("%A"))
+        sess = Session(user_id=user_id, date=day, weekday=day.strftime("%A"))
         session.add(sess)
         await session.flush()
-    ex = await get_or_create_exercise(session, str(args["exercise_slug"]))
+    ex = await get_or_create_exercise(session, str(args["exercise_slug"]), user_id)
     count = len(
         (
             await session.execute(
@@ -323,16 +331,22 @@ async def _log_set(session: AsyncSession, args: JSON) -> object:
     },
     writes=True,
 )
-async def _check_meal(session: AsyncSession, args: JSON) -> object:
+async def _check_meal(session: AsyncSession, args: JSON, user_id: int) -> object:
     day = _day(args)
     meal_id = int(str(args["meal_id"]))
     eaten = bool(args.get("eaten", True))
     row = await session.scalar(
-        select(MealCheck).where(MealCheck.date == day, MealCheck.meal_id == meal_id)
+        select(MealCheck).where(
+            MealCheck.date == day, MealCheck.meal_id == meal_id, MealCheck.user_id == user_id
+        )
     )
     if eaten:
         if row is None:
-            session.add(MealCheck(date=day, meal_id=meal_id, eaten=True, checked_at=local_now()))
+            session.add(
+                MealCheck(
+                    user_id=user_id, date=day, meal_id=meal_id, eaten=True, checked_at=local_now()
+                )
+            )
         else:
             row.eaten, row.checked_at = True, local_now()
     elif row is not None:
@@ -356,11 +370,13 @@ async def _check_meal(session: AsyncSession, args: JSON) -> object:
     },
     writes=True,
 )
-async def _set_wellbeing(session: AsyncSession, args: JSON) -> object:
+async def _set_wellbeing(session: AsyncSession, args: JSON, user_id: int) -> object:
     day = _day(args)
-    row = await session.scalar(select(DailyWellbeing).where(DailyWellbeing.date == day))
+    row = await session.scalar(
+        select(DailyWellbeing).where(DailyWellbeing.date == day, DailyWellbeing.user_id == user_id)
+    )
     if row is None:
-        row = DailyWellbeing(date=day)
+        row = DailyWellbeing(user_id=user_id, date=day)
         session.add(row)
     for f in ("energy", "motivation", "stress", "hunger"):
         if args.get(f) is not None:
@@ -386,11 +402,13 @@ async def _set_wellbeing(session: AsyncSession, args: JSON) -> object:
     },
     writes=True,
 )
-async def _record_measurement(session: AsyncSession, args: JSON) -> object:
+async def _record_measurement(session: AsyncSession, args: JSON, user_id: int) -> object:
     day = _day(args)
-    row = await session.scalar(select(Measurement).where(Measurement.date == day))
+    row = await session.scalar(
+        select(Measurement).where(Measurement.date == day, Measurement.user_id == user_id)
+    )
     if row is None:
-        row = Measurement(date=day)
+        row = Measurement(user_id=user_id, date=day)
         session.add(row)
     for f in _MEASUREMENT_FIELDS:
         if args.get(f) is not None:

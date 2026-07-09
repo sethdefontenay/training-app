@@ -5,7 +5,7 @@ from datetime import date
 from fastapi import APIRouter, status
 from sqlalchemy import select
 
-from app.api.deps import CurrentUser, SessionDep
+from app.api.deps import CurrentUser, SessionDep, owned
 from app.models import Exercise, Measurement, MobilityDone
 from app.schemas.tracking import _MEASUREMENT_FIELDS as FIELDS
 from app.schemas.tracking import (
@@ -15,7 +15,7 @@ from app.schemas.tracking import (
     MobilityDoneIn,
     ProgressionPoint,
 )
-from app.services.workouts import get_or_create_exercise, progression
+from app.services.workouts import _find_exercise, get_or_create_exercise, progression
 
 router = APIRouter(tags=["tracking"])
 
@@ -28,9 +28,11 @@ def _to_out(row: Measurement) -> MeasurementOut:
 async def upsert_measurement(
     body: MeasurementIn, session: SessionDep, user: CurrentUser
 ) -> MeasurementOut:
-    row = await session.scalar(select(Measurement).where(Measurement.date == body.date))
+    row = await session.scalar(
+        owned(select(Measurement), Measurement, user).where(Measurement.date == body.date)
+    )
     if row is None:
-        row = Measurement(date=body.date)
+        row = Measurement(user_id=user.id, date=body.date)
         session.add(row)
     for field in FIELDS:
         value = getattr(body, field)
@@ -43,7 +45,15 @@ async def upsert_measurement(
 
 @router.get("/measurements", response_model=list[MeasurementOut])
 async def list_measurements(session: SessionDep, user: CurrentUser) -> list[MeasurementOut]:
-    rows = (await session.execute(select(Measurement).order_by(Measurement.date))).scalars().all()
+    rows = (
+        (
+            await session.execute(
+                owned(select(Measurement), Measurement, user).order_by(Measurement.date)
+            )
+        )
+        .scalars()
+        .all()
+    )
     return [_to_out(r) for r in rows]
 
 
@@ -51,11 +61,16 @@ async def list_measurements(session: SessionDep, user: CurrentUser) -> list[Meas
 async def measurement_with_change(
     on: date, session: SessionDep, user: CurrentUser
 ) -> MeasurementWithChange:
-    row = await session.scalar(select(Measurement).where(Measurement.date == on))
+    row = await session.scalar(
+        owned(select(Measurement), Measurement, user).where(Measurement.date == on)
+    )
     if row is None:
         return MeasurementWithChange(date=on)
     prev = await session.scalar(
-        select(Measurement).where(Measurement.date < on).order_by(Measurement.date.desc()).limit(1)
+        owned(select(Measurement), Measurement, user)
+        .where(Measurement.date < on)
+        .order_by(Measurement.date.desc())
+        .limit(1)
     )
     changes: dict[str, float] = {}
     if prev is not None:
@@ -72,14 +87,14 @@ async def measurement_with_change(
 async def mark_mobility_done(
     body: MobilityDoneIn, session: SessionDep, user: CurrentUser
 ) -> dict[str, bool]:
-    ex = await get_or_create_exercise(session, body.exercise_slug)
+    ex = await get_or_create_exercise(session, body.exercise_slug, user.id)
     existing = await session.scalar(
-        select(MobilityDone).where(
+        owned(select(MobilityDone), MobilityDone, user).where(
             MobilityDone.date == body.date, MobilityDone.exercise_id == ex.id
         )
     )
     if existing is None:
-        session.add(MobilityDone(date=body.date, exercise_id=ex.id))
+        session.add(MobilityDone(user_id=user.id, date=body.date, exercise_id=ex.id))
         await session.commit()
     return {"done": True}
 
@@ -88,10 +103,12 @@ async def mark_mobility_done(
 async def unmark_mobility_done(
     on: date, exercise_slug: str, session: SessionDep, user: CurrentUser
 ) -> dict[str, bool]:
-    ex = await session.scalar(select(Exercise).where(Exercise.slug == exercise_slug))
+    ex = await _find_exercise(session, exercise_slug, user.id)
     if ex is not None:
         existing = await session.scalar(
-            select(MobilityDone).where(MobilityDone.date == on, MobilityDone.exercise_id == ex.id)
+            owned(select(MobilityDone), MobilityDone, user).where(
+                MobilityDone.date == on, MobilityDone.exercise_id == ex.id
+            )
         )
         if existing is not None:
             await session.delete(existing)
@@ -106,7 +123,7 @@ async def list_mobility_done(on: date, session: SessionDep, user: CurrentUser) -
             await session.execute(
                 select(Exercise.slug)
                 .join(MobilityDone, MobilityDone.exercise_id == Exercise.id)
-                .where(MobilityDone.date == on)
+                .where(MobilityDone.date == on, MobilityDone.user_id == user.id)
                 .order_by(Exercise.slug)
             )
         )
@@ -120,5 +137,5 @@ async def list_mobility_done(on: date, session: SessionDep, user: CurrentUser) -
 async def exercise_progression(
     slug: str, session: SessionDep, user: CurrentUser
 ) -> list[ProgressionPoint]:
-    points = await progression(session, slug)
+    points = await progression(session, slug, user.id)
     return [ProgressionPoint(date=p["date"], display=str(p["display"])) for p in points]

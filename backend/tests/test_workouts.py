@@ -3,18 +3,25 @@
 from datetime import date
 
 from httpx import AsyncClient
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models import Session, SetEntry
+from app.models import Session, SetEntry, User
 from app.services.workouts import get_or_create_exercise
+
+
+async def _owner_id(session: AsyncSession) -> int:
+    """The seeded owner's id (single-user tests seed exactly one user)."""
+    return int(await session.scalar(select(User.id).order_by(User.id).limit(1)))
 
 
 async def _seed_session(
     session: AsyncSession, slug: str, day: date, sets: list[tuple[str | None, str]]
 ) -> None:
     """Seed a prior session with (weight, reps) tuples; weight None = bodyweight."""
-    ex = await get_or_create_exercise(session, slug)
-    s = Session(date=day, weekday=day.strftime("%A"))
+    uid = await _owner_id(session)
+    ex = await get_or_create_exercise(session, slug, uid)
+    s = Session(user_id=uid, date=day, weekday=day.strftime("%A"))
     session.add(s)
     await session.flush()
     for i, (weight, reps) in enumerate(sets, start=1):
@@ -226,7 +233,7 @@ async def test_list_sessions_history(auth_client: AsyncClient, session: AsyncSes
     await _seed_session(session, "leg-press-machine", date(2026, 5, 18), [("40", "15")])
     await _seed_session(session, "lat-pulldown", date(2026, 5, 25), [("30", "12"), ("30", "10")])
     # an empty (rest) session should be excluded
-    s = Session(date=date(2026, 5, 26), weekday="Tuesday")
+    s = Session(user_id=await _owner_id(session), date=date(2026, 5, 26), weekday="Tuesday")
     session.add(s)
     await session.commit()
 

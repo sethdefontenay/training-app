@@ -3,12 +3,13 @@
 from datetime import date
 
 from httpx import AsyncClient
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.sync import get_health_provider
 from app.integrations.health import IntegrationAuthExpired, SleepRecord, StepRecord
 from app.main import app
-from app.models import StepsDay
+from app.models import StepsDay, User
 
 
 class ExpiredProvider:
@@ -75,13 +76,12 @@ async def test_resync_is_idempotent(auth_client: AsyncClient, session: AsyncSess
 async def test_manual_entry_not_overwritten(
     auth_client: AsyncClient, session: AsyncSession
 ) -> None:
-    session.add(StepsDay(date=date(2026, 5, 25), steps=8200, manual=True))
+    uid = int(await session.scalar(select(User.id).order_by(User.id).limit(1)))
+    session.add(StepsDay(user_id=uid, date=date(2026, 5, 25), steps=8200, manual=True))
     await session.commit()
     _use_provider([StepRecord(date(2026, 5, 25), 733, 7000)], [])
     body = (await auth_client.post("/api/v1/sync/steps-sleep", params={"days": 1})).json()
     assert "2026-05-25" in body["preserved_manual"]
-    from sqlalchemy import select
-
     row = await session.scalar(select(StepsDay).where(StepsDay.date == date(2026, 5, 25)))
     assert row is not None and row.steps == 8200  # manual value preserved
 

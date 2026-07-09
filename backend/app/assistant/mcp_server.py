@@ -11,10 +11,12 @@ import json
 import mcp.types as types
 from mcp.server.lowlevel import Server
 from mcp.server.streamable_http_manager import StreamableHTTPSessionManager
+from sqlalchemy import select
 from starlette.types import ASGIApp, Receive, Scope, Send
 
 from app.assistant.tools import TOOLS, TOOLS_BY_NAME
 from app.database import SessionLocal
+from app.models import User
 
 
 def mcp_tool_defs() -> list[types.Tool]:
@@ -31,7 +33,14 @@ async def call_mcp_tool(name: str, arguments: dict[str, object]) -> str:
         return json.dumps({"error": f"unknown tool {name}"})
     try:
         async with SessionLocal() as session:
-            result = await tool.handler(session, arguments)
+            # The MCP server is gated behind a single MCP_TOKEN — the owner's external
+            # access — so tools operate over the admin (owner) account's data.
+            owner = await session.scalar(
+                select(User).where(User.is_admin.is_(True)).order_by(User.id).limit(1)
+            )
+            if owner is None:
+                return json.dumps({"error": "no admin user configured"})
+            result = await tool.handler(session, arguments, owner.id)
         return json.dumps(result, default=str)
     except Exception as e:  # surface to the MCP client rather than 500
         return json.dumps({"error": str(e)})

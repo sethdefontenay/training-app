@@ -18,12 +18,12 @@ async def night(
     user: CurrentUser,
     date_: Annotated[date | None, Query(alias="date")] = None,
 ) -> dict[str, object]:
-    day = date_ or await latest_night_date(session) or local_today()
-    return await night_view(session, day)
+    day = date_ or await latest_night_date(session, user.id) or local_today()
+    return await night_view(session, day, user.id)
 
 
 @router.get("/trend")
 async def sleep_trend(session: SessionDep, user: CurrentUser, days: int = 7) -> dict[str, object]:
     end = local_today()
     start = end - timedelta(days=days - 1)
-    return await trend(session, start, end)
+    return await trend(session, start, end, user.id)

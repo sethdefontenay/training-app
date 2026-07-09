@@ -62,11 +62,39 @@ async def client(
 
 @pytest_asyncio.fixture
 async def user(session: AsyncSession) -> User:
-    u = User(email="seth@example.com", hashed_password=hash_password("correcthorse"))
+    # The owner (Seth): admin + all capabilities on, matching the prod backfill.
+    u = User(
+        email="seth@example.com",
+        hashed_password=hash_password("correcthorse"),
+        is_admin=True,
+        has_diabetes=True,
+        has_health_integrations=True,
+        has_checkins=True,
+    )
     session.add(u)
     await session.commit()
     await session.refresh(u)
     return u
+
+
+@pytest_asyncio.fixture
+async def other_user(session: AsyncSession) -> User:
+    """A second, independent owner — capability flags off (a standard invited user).
+    Used by the isolation tests to prove no cross-user data access."""
+    u = User(email="other@example.com", hashed_password=hash_password("correcthorse"))
+    session.add(u)
+    await session.commit()
+    await session.refresh(u)
+    return u
+
+
+@pytest_asyncio.fixture
+async def other_client(client: AsyncClient, other_user: User) -> AsyncClient:
+    """A client authed as the second user (separate transport from `client`)."""
+    transport = ASGITransport(app=app)
+    c = AsyncClient(transport=transport, base_url="http://test")
+    c.headers["Authorization"] = f"Bearer {create_access_token(str(other_user.id))}"
+    return c
 
 
 @pytest_asyncio.fixture

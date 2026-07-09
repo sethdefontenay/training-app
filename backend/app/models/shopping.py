@@ -5,10 +5,10 @@ from datetime import date
 from sqlalchemy import Date, ForeignKey
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from app.models.base import Base, TimestampMixin
+from app.models.base import Base, OwnedMixin, TimestampMixin
 
 
-class ShoppingList(Base, TimestampMixin):
+class ShoppingList(OwnedMixin, Base, TimestampMixin):
     __tablename__ = "shopping_list"
 
     id: Mapped[int] = mapped_column(primary_key=True)

@@ -29,13 +29,17 @@ def window_for(start_on: date) -> tuple[date, date]:
 
 
 async def metric_summaries(
-    session: AsyncSession, window_start: date, window_end: date
+    session: AsyncSession, window_start: date, window_end: date, user_id: int
 ) -> dict[str, dict[str, object]]:
     rows = (
         (
             await session.execute(
                 select(DailyWellbeing)
-                .where(DailyWellbeing.date >= window_start, DailyWellbeing.date <= window_end)
+                .where(
+                    DailyWellbeing.date >= window_start,
+                    DailyWellbeing.date <= window_end,
+                    DailyWellbeing.user_id == user_id,
+                )
                 .order_by(DailyWellbeing.date)
             )
         )
@@ -56,18 +60,24 @@ async def metric_summaries(
 
 
 async def latest_measurement(
-    session: AsyncSession, window_start: date, window_end: date
+    session: AsyncSession, window_start: date, window_end: date, user_id: int
 ) -> Measurement | None:
     row: Measurement | None = await session.scalar(
         select(Measurement)
-        .where(Measurement.date >= window_start, Measurement.date <= window_end)
+        .where(
+            Measurement.date >= window_start,
+            Measurement.date <= window_end,
+            Measurement.user_id == user_id,
+        )
         .order_by(Measurement.date.desc())
         .limit(1)
     )
     return row
 
 
-async def latest_per_metric(session: AsyncSession, on_or_before: date) -> dict[str, float | None]:
+async def latest_per_metric(
+    session: AsyncSession, on_or_before: date, user_id: int
+) -> dict[str, float | None]:
     """Most recent recorded value for each body metric (may be from different dates).
 
     One query (was one per field): pull rows newest-first and keep the first non-null
@@ -80,7 +90,7 @@ async def latest_per_metric(session: AsyncSession, on_or_before: date) -> dict[s
         (
             await session.execute(
                 select(Measurement)
-                .where(Measurement.date <= on_or_before)
+                .where(Measurement.date <= on_or_before, Measurement.user_id == user_id)
                 .order_by(Measurement.date.desc())
             )
         )
@@ -99,18 +109,20 @@ async def latest_per_metric(session: AsyncSession, on_or_before: date) -> dict[s
 
 
 async def steps_average(
-    session: AsyncSession, window_start: date, window_end: date
+    session: AsyncSession, window_start: date, window_end: date, user_id: int
 ) -> float | None:
     avg = await session.scalar(
         select(func.avg(StepsDay.steps)).where(
-            StepsDay.date >= window_start, StepsDay.date <= window_end
+            StepsDay.date >= window_start,
+            StepsDay.date <= window_end,
+            StepsDay.user_id == user_id,
         )
     )
     return round(float(avg)) if avg is not None else None
 
 
 async def sleep_summary(
-    session: AsyncSession, window_start: date, window_end: date
+    session: AsyncSession, window_start: date, window_end: date, user_id: int
 ) -> dict[str, float | int | None]:
     row = (
         await session.execute(
@@ -118,7 +130,11 @@ async def sleep_summary(
                 func.avg(SleepNight.efficiency),
                 func.avg(SleepNight.asleep_min),
                 func.count(SleepNight.id),
-            ).where(SleepNight.date >= window_start, SleepNight.date <= window_end)
+            ).where(
+                SleepNight.date >= window_start,
+                SleepNight.date <= window_end,
+                SleepNight.user_id == user_id,
+            )
         )
     ).one()
     avg_eff, avg_asleep, nights = row
@@ -129,10 +145,16 @@ async def sleep_summary(
     }
 
 
-async def sessions_logged(session: AsyncSession, window_start: date, window_end: date) -> int:
+async def sessions_logged(
+    session: AsyncSession, window_start: date, window_end: date, user_id: int
+) -> int:
     count = await session.scalar(
         select(func.count())
         .select_from(Session)
-        .where(Session.date >= window_start, Session.date <= window_end)
+        .where(
+            Session.date >= window_start,
+            Session.date <= window_end,
+            Session.user_id == user_id,
+        )
     )
     return count or 0

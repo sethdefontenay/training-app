@@ -75,19 +75,30 @@ def _to_date(value: Any) -> date:
     return datetime.strptime(str(value), "%Y-%m-%d").date()
 
 
-async def _get_or_create_exercise(session: AsyncSession, slug: str) -> Exercise:
-    ex = await session.scalar(select(Exercise).where(Exercise.slug == slug))
+async def _get_or_create_exercise(session: AsyncSession, slug: str, user_id: int) -> Exercise:
+    from sqlalchemy import or_
+
+    ex = await session.scalar(
+        select(Exercise)
+        .where(
+            Exercise.slug == slug, or_(Exercise.owner_id.is_(None), Exercise.owner_id == user_id)
+        )
+        .order_by(Exercise.owner_id.is_(None))
+        .limit(1)
+    )
     if ex is None:
-        ex = Exercise(slug=slug, name=slug.replace("-", " ").title())
+        ex = Exercise(slug=slug, name=slug.replace("-", " ").title(), owner_id=user_id)
         session.add(ex)
         await session.flush()
     return ex
 
 
-async def _get_or_create_session(session: AsyncSession, day: date) -> Session:
-    existing = await session.scalar(select(Session).where(Session.date == day))
+async def _get_or_create_session(session: AsyncSession, day: date, user_id: int) -> Session:
+    existing = await session.scalar(
+        select(Session).where(Session.date == day, Session.user_id == user_id)
+    )
     if existing is None:
-        existing = Session(date=day, weekday=day.strftime("%A"))
+        existing = Session(user_id=user_id, date=day, weekday=day.strftime("%A"))
         session.add(existing)
         await session.flush()
     return existing
@@ -182,7 +193,9 @@ def _parse_ingredients_section(body: str) -> list[tuple[str, float | None, str |
     return out
 
 
-async def _import_plan(session: AsyncSession, vault: Path, summary: ImportSummary) -> None:
+async def _import_plan(
+    session: AsyncSession, vault: Path, summary: ImportSummary, user_id: int
+) -> None:
     plan_dir = vault / "Plan"
     if not plan_dir.is_dir():
         return
@@ -201,16 +214,20 @@ async def _import_plan(session: AsyncSession, vault: Path, summary: ImportSummar
 
     # Idempotent: replace an existing plan with the same source (cascades children).
     if source is not None:
-        existing = await session.scalar(select(Plan).where(Plan.source == source))
+        existing = await session.scalar(
+            select(Plan).where(Plan.source == source, Plan.user_id == user_id)
+        )
         if existing is not None:
             await session.delete(existing)
             await session.flush()
-    current = await session.scalar(select(Plan).where(Plan.is_current.is_(True)))
+    current = await session.scalar(
+        select(Plan).where(Plan.is_current.is_(True), Plan.user_id == user_id)
+    )
     if current is not None:
         current.is_current = False
 
     start = _extract_date(source or "", local_today())
-    plan = Plan(start_date=start, is_current=True, source=source, phase=phase)
+    plan = Plan(user_id=user_id, start_date=start, is_current=True, source=source, phase=phase)
     _apply_targets(plan, plan_dir)
     session.add(plan)
     await session.flush()
@@ -228,7 +245,7 @@ async def _import_plan(session: AsyncSession, vault: Path, summary: ImportSummar
         await session.flush()
         day_by_stem[f.stem.lower()] = (td, fm.get("weekday"))
         for i, row in enumerate(_parse_exercise_table(body)):
-            ex = await _get_or_create_exercise(session, str(row["slug"]))
+            ex = await _get_or_create_exercise(session, str(row["slug"]), user_id)
             if row["name"]:
                 ex.name = str(row["name"])
             if row["weight"] is None:
@@ -357,22 +374,24 @@ async def _import_meals(
     plan.daily_fat_g = totals["fat_g"] or None
 
 
-async def import_vault(session: AsyncSession, vault: Path) -> ImportSummary:
+async def import_vault(session: AsyncSession, vault: Path, user_id: int) -> ImportSummary:
     summary = ImportSummary()
-    await _import_plan(session, vault, summary)
-    await _import_exercises(session, vault / "Exercises", summary)
-    await _import_measurements(session, vault / "Measurements", summary)
-    await _import_steps(session, vault / "Steps", summary)
-    await _import_sleep(session, vault / "Sleep", summary)
-    await _import_sessions(session, vault / "Logs", summary)
-    await _import_sets(session, vault / "Sets", summary)
-    await _import_mobility(session, vault / "Mobility-Done", summary)
+    await _import_plan(session, vault, summary, user_id)
+    await _import_exercises(session, vault / "Exercises", summary, user_id)
+    await _import_measurements(session, vault / "Measurements", summary, user_id)
+    await _import_steps(session, vault / "Steps", summary, user_id)
+    await _import_sleep(session, vault / "Sleep", summary, user_id)
+    await _import_sessions(session, vault / "Logs", summary, user_id)
+    await _import_sets(session, vault / "Sets", summary, user_id)
+    await _import_mobility(session, vault / "Mobility-Done", summary, user_id)
     await session.commit()
 
     # Derived output: weekly shopping list from the imported plan's meals.
-    plan = await session.scalar(select(Plan).where(Plan.is_current.is_(True)))
+    plan = await session.scalar(
+        select(Plan).where(Plan.is_current.is_(True), Plan.user_id == user_id)
+    )
     if plan is not None:
-        await generate_for_plan(session, plan, plan.start_date)
+        await generate_for_plan(session, plan, plan.start_date, user_id)
     return summary
 
 
@@ -380,23 +399,41 @@ def _notes(folder: Path) -> list[Path]:
     return sorted(folder.glob("*.md")) if folder.is_dir() else []
 
 
-async def _import_exercises(session: AsyncSession, folder: Path, summary: ImportSummary) -> None:
+async def _import_exercises(
+    session: AsyncSession, folder: Path, summary: ImportSummary, user_id: int
+) -> None:
+    from sqlalchemy import or_
+
     for path in _notes(folder):
         slug = path.stem
-        ex = await session.scalar(select(Exercise).where(Exercise.slug == slug))
+        ex = await session.scalar(
+            select(Exercise)
+            .where(
+                Exercise.slug == slug,
+                or_(Exercise.owner_id.is_(None), Exercise.owner_id == user_id),
+            )
+            .order_by(Exercise.owner_id.is_(None))
+            .limit(1)
+        )
         body = path.read_text(encoding="utf-8")
         try:
             fm = parse_frontmatter(body)
         except ValueError:
             fm = {}
         if ex is None:
-            ex = Exercise(slug=slug, name=str(fm.get("name", slug.replace("-", " ").title())))
+            ex = Exercise(
+                slug=slug,
+                name=str(fm.get("name", slug.replace("-", " ").title())),
+                owner_id=user_id,
+            )
             session.add(ex)
         ex.is_bodyweight = bool(fm.get("is_bodyweight", ex.is_bodyweight if ex else False))
         summary.bump("exercises")
 
 
-async def _import_measurements(session: AsyncSession, folder: Path, summary: ImportSummary) -> None:
+async def _import_measurements(
+    session: AsyncSession, folder: Path, summary: ImportSummary, user_id: int
+) -> None:
     fields = ("waist_cm", "tummy_cm", "bum_cm", "right_thigh_cm", "left_thigh_cm", "weight_kg")
     for path in _notes(folder):
         try:
@@ -405,9 +442,11 @@ async def _import_measurements(session: AsyncSession, folder: Path, summary: Imp
         except (ValueError, KeyError) as e:
             summary.fail(path, str(e))
             continue
-        row = await session.scalar(select(Measurement).where(Measurement.date == day))
+        row = await session.scalar(
+            select(Measurement).where(Measurement.date == day, Measurement.user_id == user_id)
+        )
         if row is None:
-            row = Measurement(date=day)
+            row = Measurement(user_id=user_id, date=day)
             session.add(row)
         for f in fields:
             if fm.get(f) not in (None, ""):
@@ -415,7 +454,9 @@ async def _import_measurements(session: AsyncSession, folder: Path, summary: Imp
         summary.bump("measurements")
 
 
-async def _import_steps(session: AsyncSession, folder: Path, summary: ImportSummary) -> None:
+async def _import_steps(
+    session: AsyncSession, folder: Path, summary: ImportSummary, user_id: int
+) -> None:
     for path in _notes(folder):
         try:
             fm = parse_frontmatter(path.read_text(encoding="utf-8"))
@@ -423,9 +464,11 @@ async def _import_steps(session: AsyncSession, folder: Path, summary: ImportSumm
         except (ValueError, KeyError) as e:
             summary.fail(path, str(e))
             continue
-        row = await session.scalar(select(StepsDay).where(StepsDay.date == day))
+        row = await session.scalar(
+            select(StepsDay).where(StepsDay.date == day, StepsDay.user_id == user_id)
+        )
         if row is None:
-            row = StepsDay(date=day)
+            row = StepsDay(user_id=user_id, date=day)
             session.add(row)
         row.steps = int(fm.get("steps", 0))
         row.target_steps = fm.get("target_steps")
@@ -433,7 +476,9 @@ async def _import_steps(session: AsyncSession, folder: Path, summary: ImportSumm
         summary.bump("steps")
 
 
-async def _import_sleep(session: AsyncSession, folder: Path, summary: ImportSummary) -> None:
+async def _import_sleep(
+    session: AsyncSession, folder: Path, summary: ImportSummary, user_id: int
+) -> None:
     floats = (
         "asleep_min",
         "in_bed_min",
@@ -450,9 +495,11 @@ async def _import_sleep(session: AsyncSession, folder: Path, summary: ImportSumm
         except (ValueError, KeyError) as e:
             summary.fail(path, str(e))
             continue
-        row = await session.scalar(select(SleepNight).where(SleepNight.date == day))
+        row = await session.scalar(
+            select(SleepNight).where(SleepNight.date == day, SleepNight.user_id == user_id)
+        )
         if row is None:
-            row = SleepNight(date=day)
+            row = SleepNight(user_id=user_id, date=day)
             session.add(row)
         row.bedtime = fm.get("bedtime")
         row.wake_time = fm.get("wake_time")
@@ -462,7 +509,9 @@ async def _import_sleep(session: AsyncSession, folder: Path, summary: ImportSumm
         summary.bump("sleep")
 
 
-async def _import_sessions(session: AsyncSession, folder: Path, summary: ImportSummary) -> None:
+async def _import_sessions(
+    session: AsyncSession, folder: Path, summary: ImportSummary, user_id: int
+) -> None:
     for path in _notes(folder):
         try:
             fm = parse_frontmatter(path.read_text(encoding="utf-8"))
@@ -470,11 +519,13 @@ async def _import_sessions(session: AsyncSession, folder: Path, summary: ImportS
         except (ValueError, KeyError) as e:
             summary.fail(path, str(e))
             continue
-        await _get_or_create_session(session, day)
+        await _get_or_create_session(session, day, user_id)
         summary.bump("sessions")
 
 
-async def _import_sets(session: AsyncSession, folder: Path, summary: ImportSummary) -> None:
+async def _import_sets(
+    session: AsyncSession, folder: Path, summary: ImportSummary, user_id: int
+) -> None:
     for path in _notes(folder):
         try:
             fm = parse_frontmatter(path.read_text(encoding="utf-8"))
@@ -484,8 +535,8 @@ async def _import_sets(session: AsyncSession, folder: Path, summary: ImportSumma
         except (ValueError, KeyError) as e:
             summary.fail(path, str(e))
             continue
-        sess = await _get_or_create_session(session, day)
-        ex = await _get_or_create_exercise(session, slug)
+        sess = await _get_or_create_session(session, day, user_id)
+        ex = await _get_or_create_exercise(session, slug, user_id)
         existing = await session.scalar(
             select(SetEntry).where(
                 SetEntry.session_id == sess.id,
@@ -501,7 +552,9 @@ async def _import_sets(session: AsyncSession, folder: Path, summary: ImportSumma
         summary.bump("sets")
 
 
-async def _import_mobility(session: AsyncSession, folder: Path, summary: ImportSummary) -> None:
+async def _import_mobility(
+    session: AsyncSession, folder: Path, summary: ImportSummary, user_id: int
+) -> None:
     for path in _notes(folder):
         try:
             fm = parse_frontmatter(path.read_text(encoding="utf-8"))
@@ -510,10 +563,14 @@ async def _import_mobility(session: AsyncSession, folder: Path, summary: ImportS
         except (ValueError, KeyError) as e:
             summary.fail(path, str(e))
             continue
-        ex = await _get_or_create_exercise(session, slug)
+        ex = await _get_or_create_exercise(session, slug, user_id)
         existing = await session.scalar(
-            select(MobilityDone).where(MobilityDone.date == day, MobilityDone.exercise_id == ex.id)
+            select(MobilityDone).where(
+                MobilityDone.date == day,
+                MobilityDone.exercise_id == ex.id,
+                MobilityDone.user_id == user_id,
+            )
         )
         if existing is None:
-            session.add(MobilityDone(date=day, exercise_id=ex.id))
+            session.add(MobilityDone(user_id=user_id, date=day, exercise_id=ex.id))
         summary.bump("mobility")

@@ -54,7 +54,11 @@ class AssistantNotConfigured(RuntimeError):
 
 
 async def run_chat(
-    session: AsyncSession, messages: list[dict[str, object]], *, read_only: bool = False
+    session: AsyncSession,
+    messages: list[dict[str, object]],
+    *,
+    user_id: int,
+    read_only: bool = False,
 ) -> ChatResult:
     """Run the tool-use loop. `messages` is the conversation so far ({role, content}).
 
@@ -113,7 +117,7 @@ async def run_chat(
                     # tool somehow slipped into the offered set.
                     payload = {"error": "read-only access: this account cannot make changes"}
                 else:
-                    payload = await tool.handler(session, dict(block.input))
+                    payload = await tool.handler(session, dict(block.input), user_id)
                 content = json.dumps(payload, default=str)
             except Exception as e:  # surface failures to the model, don't crash the turn
                 content = json.dumps({"error": str(e)})

@@ -45,7 +45,7 @@ async def sync(
     end = before or local_today()
     start = end - timedelta(days=days - 1)
     try:
-        result = await sync_diabetes(session, provider, start, end)
+        result = await sync_diabetes(session, provider, start, end, user.id)
     except IntegrationNotConfigured as e:
         raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(e)) from e
     except NotImplementedError as e:
@@ -76,7 +76,7 @@ async def upload(
             status_code=400, detail="Expected a JSON array of Tidepool data objects"
         )
     glucose, insulin = parse_tidepool_export(data)
-    g_added, i_added = await store_points(session, glucose, insulin)
+    g_added, i_added = await store_points(session, glucose, insulin, user.id)
     return {"glucose_added": g_added, "insulin_added": i_added}
 
 
@@ -91,11 +91,11 @@ async def graph(
     per-day average BG trend (week/month). Bucketed in the user's timezone."""
     tz = ZoneInfo(get_settings().timezone)
     if range == "day":
-        return await daily_series(session, date_ or local_today(), tz)
+        return await daily_series(session, date_ or local_today(), tz, user.id)
     days = 7 if range == "week" else 30
     end = date_ or local_today()
     start = end - timedelta(days=days - 1)
-    return await trend_series(session, start, end, tz)
+    return await trend_series(session, start, end, tz, user.id)
 
 
 @router.get("/record")
@@ -104,11 +104,11 @@ async def record(
 ) -> dict[str, object]:
     end = before or local_today()
     start = end - timedelta(days=days - 1)
-    insulin = await insulin_count(session, start, end)
+    insulin = await insulin_count(session, start, end, user.id)
     return {
         "window_start": start.isoformat(),
         "window_end": end.isoformat(),
-        "glucose": await glucose_summary(session, start, end),
+        "glucose": await glucose_summary(session, start, end, user.id),
         "insulin_events": insulin,
         "pump_uploaded": insulin > 0,
     }

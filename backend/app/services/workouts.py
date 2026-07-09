@@ -13,17 +13,17 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models import Exercise, Session, SetEntry
 
 
-async def progression(session: AsyncSession, slug: str) -> list[dict[str, object]]:
+async def progression(session: AsyncSession, slug: str, user_id: int) -> list[dict[str, object]]:
     """Per-session-date top display, oldest to newest. Weighted -> heaviest 'N kg';
     bodyweight -> best 'N reps'."""
-    ex = await session.scalar(select(Exercise).where(Exercise.slug == slug))
+    ex = await _find_exercise(session, slug, user_id)
     if ex is None:
         return []
     rows = (
         await session.execute(
             select(Session.date, SetEntry.weight, SetEntry.reps)
             .join(SetEntry, SetEntry.session_id == Session.id)
-            .where(SetEntry.exercise_id == ex.id)
+            .where(SetEntry.exercise_id == ex.id, Session.user_id == user_id)
             .order_by(Session.date)
         )
     ).all()
@@ -47,13 +47,14 @@ NO_HISTORY = "—"
 BODYWEIGHT = "BW"
 
 
-async def list_sessions(session: AsyncSession) -> list[dict[str, object]]:
+async def list_sessions(session: AsyncSession, user_id: int) -> list[dict[str, object]]:
     """Logged workout sessions (those with sets), most recent first, grouped by exercise."""
     from sqlalchemy.orm import selectinload
 
     rows = (
         await session.scalars(
             select(Session)
+            .where(Session.user_id == user_id)
             .options(selectinload(Session.sets).selectinload(SetEntry.exercise))
             .order_by(Session.date.desc())
         )
@@ -82,7 +83,7 @@ async def list_sessions(session: AsyncSession) -> list[dict[str, object]]:
 
 
 async def progress_series(
-    session: AsyncSession, slug: str
+    session: AsyncSession, slug: str, user_id: int
 ) -> tuple[str, str, list[dict[str, object]]] | None:
     """For an exercise, the top set per workout day over time (oldest → newest).
 
@@ -90,14 +91,14 @@ async def progress_series(
     else "reps" (bodyweight progression). Each point carries the heaviest weight and the
     reps at that set (ties on weight broken by most reps), matching the locked rule.
     """
-    ex = await session.scalar(select(Exercise).where(Exercise.slug == slug))
+    ex = await _find_exercise(session, slug, user_id)
     if ex is None:
         return None
     rows = (
         await session.execute(
             select(Session.date, SetEntry.weight, SetEntry.reps)
             .join(SetEntry, SetEntry.session_id == Session.id)
-            .where(SetEntry.exercise_id == ex.id)
+            .where(SetEntry.exercise_id == ex.id, Session.user_id == user_id)
             .order_by(Session.date)
         )
     ).all()
@@ -140,10 +141,30 @@ def set_display(weight: str | None, reps: str | None) -> str:
     return f"{left} × {reps}" if reps not in (None, "") else left
 
 
-async def get_or_create_exercise(session: AsyncSession, slug: str) -> Exercise:
-    ex = await session.scalar(select(Exercise).where(Exercise.slug == slug))
+async def _find_exercise(session: AsyncSession, slug: str, user_id: int) -> Exercise | None:
+    """Resolve a slug to the exercise visible to this user: their own custom row wins,
+    else the shared base row (owner_id IS NULL). Never another user's custom exercise."""
+    from sqlalchemy import or_
+
+    ex: Exercise | None = await session.scalar(
+        select(Exercise)
+        .where(
+            Exercise.slug == slug,
+            or_(Exercise.owner_id.is_(None), Exercise.owner_id == user_id),
+        )
+        # A user's own custom row (owner_id set) takes precedence over the shared base.
+        .order_by(Exercise.owner_id.is_(None))
+        .limit(1)
+    )
+    return ex
+
+
+async def get_or_create_exercise(session: AsyncSession, slug: str, user_id: int) -> Exercise:
+    """Find the slug among {shared base, this user's custom}; if absent, create it as the
+    user's custom exercise (owner_id = user_id) so it never pollutes another user's catalog."""
+    ex = await _find_exercise(session, slug, user_id)
     if ex is None:
-        ex = Exercise(slug=slug, name=slug.replace("-", " ").title())
+        ex = Exercise(slug=slug, name=slug.replace("-", " ").title(), owner_id=user_id)
         session.add(ex)
         await session.flush()
     return ex
@@ -158,15 +179,17 @@ def _to_float(value: str | None) -> float | None:
         return None
 
 
-async def last_week_display(session: AsyncSession, exercise_slug: str, before: date) -> str:
-    ex = await session.scalar(select(Exercise).where(Exercise.slug == exercise_slug))
+async def last_week_display(
+    session: AsyncSession, exercise_slug: str, before: date, user_id: int
+) -> str:
+    ex = await _find_exercise(session, exercise_slug, user_id)
     if ex is None:
         return NO_HISTORY
 
     most_recent = await session.scalar(
         select(Session.date)
         .join(SetEntry, SetEntry.session_id == Session.id)
-        .where(SetEntry.exercise_id == ex.id, Session.date < before)
+        .where(SetEntry.exercise_id == ex.id, Session.date < before, Session.user_id == user_id)
         .order_by(Session.date.desc())
         .limit(1)
     )
@@ -178,7 +201,11 @@ async def last_week_display(session: AsyncSession, exercise_slug: str, before: d
             await session.execute(
                 select(SetEntry.weight)
                 .join(Session, SetEntry.session_id == Session.id)
-                .where(SetEntry.exercise_id == ex.id, Session.date == most_recent)
+                .where(
+                    SetEntry.exercise_id == ex.id,
+                    Session.date == most_recent,
+                    Session.user_id == user_id,
+                )
             )
         )
         .scalars()
@@ -192,7 +219,7 @@ async def last_week_display(session: AsyncSession, exercise_slug: str, before: d
 
 
 async def last_week_for_exercises(
-    session: AsyncSession, exercise_ids: list[int], before: date
+    session: AsyncSession, exercise_ids: list[int], before: date, user_id: int
 ) -> dict[int, str]:
     """Batch version of `last_week_display` for many exercises in a single query.
 
@@ -217,7 +244,11 @@ async def last_week_for_exercises(
             .label("rnk"),
         )
         .join(Session, SetEntry.session_id == Session.id)
-        .where(SetEntry.exercise_id.in_(exercise_ids), Session.date < before)
+        .where(
+            SetEntry.exercise_id.in_(exercise_ids),
+            Session.date < before,
+            Session.user_id == user_id,
+        )
         .subquery()
     )
     rows = (

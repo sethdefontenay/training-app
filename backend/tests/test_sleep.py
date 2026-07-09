@@ -3,11 +3,16 @@
 from datetime import date, timedelta
 
 from httpx import AsyncClient
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.clock import local_today
 from app.integrations.health import _parse_sleep
-from app.models import SleepNight
+from app.models import SleepNight, User
+
+
+async def _uid(session: AsyncSession) -> int:
+    return int(await session.scalar(select(User.id).order_by(User.id).limit(1)))
 
 
 def test_parse_sleep_captures_stages_and_totals() -> None:
@@ -56,6 +61,7 @@ def test_parse_sleep_captures_stages_and_totals() -> None:
 async def test_night_view_returns_segments(auth_client: AsyncClient, session: AsyncSession) -> None:
     session.add(
         SleepNight(
+            user_id=await _uid(session),
             date=date(2026, 5, 24),
             bedtime="22:00",
             wake_time="06:00",
@@ -86,8 +92,9 @@ async def test_night_view_missing(auth_client: AsyncClient) -> None:
 async def test_trend_averages(auth_client: AsyncClient, session: AsyncSession) -> None:
     # Seed within the trend window relative to today (fixed dates drift out of range over time).
     d1, d2 = local_today() - timedelta(days=2), local_today() - timedelta(days=1)
-    session.add(SleepNight(date=d1, asleep_min=400, efficiency=90.0, deep_min=80))
-    session.add(SleepNight(date=d2, asleep_min=440, efficiency=94.0, deep_min=100))
+    uid = await _uid(session)
+    session.add(SleepNight(user_id=uid, date=d1, asleep_min=400, efficiency=90.0, deep_min=80))
+    session.add(SleepNight(user_id=uid, date=d2, asleep_min=440, efficiency=94.0, deep_min=100))
     await session.commit()
     body = (await auth_client.get("/api/v1/sleep/trend?days=30")).json()
     assert body["averages"]["asleep_min"] == 420.0

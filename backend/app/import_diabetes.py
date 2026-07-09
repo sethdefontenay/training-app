@@ -12,8 +12,11 @@ import json
 import sys
 from pathlib import Path
 
+from sqlalchemy import select
+
 from app.database import SessionLocal
 from app.integrations.tidepool import parse_tidepool_export, store_points
+from app.models import User
 
 
 async def _run(path: str) -> None:
@@ -23,7 +26,13 @@ async def _run(path: str) -> None:
         raise SystemExit(1)
     glucose, insulin = parse_tidepool_export(data)
     async with SessionLocal() as session:
-        g_added, i_added = await store_points(session, glucose, insulin)
+        owner = await session.scalar(
+            select(User).where(User.is_admin.is_(True)).order_by(User.id).limit(1)
+        )
+        if owner is None:
+            print("No admin user found — seed the owner account before importing.")
+            raise SystemExit(1)
+        g_added, i_added = await store_points(session, glucose, insulin, owner.id)
     print(f"Imported {g_added} glucose readings and {i_added} insulin events.")
 
 

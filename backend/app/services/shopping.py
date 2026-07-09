@@ -10,12 +10,16 @@ from app.models import Meal, MealIngredient, Plan, ShoppingItem, ShoppingList
 WEEK_MULTIPLIER = 7  # vault behaviour: daily meal ingredients × 7 for the week
 
 
-async def current_plan(session: AsyncSession) -> Plan | None:
-    plan: Plan | None = await session.scalar(select(Plan).where(Plan.is_current.is_(True)).limit(1))
+async def current_plan(session: AsyncSession, user_id: int) -> Plan | None:
+    plan: Plan | None = await session.scalar(
+        select(Plan).where(Plan.is_current.is_(True), Plan.user_id == user_id).limit(1)
+    )
     return plan
 
 
-async def generate_for_plan(session: AsyncSession, plan: Plan, week_start: date) -> ShoppingList:
+async def generate_for_plan(
+    session: AsyncSession, plan: Plan, week_start: date, user_id: int
+) -> ShoppingList:
     ingredients = (
         (
             await session.execute(
@@ -36,7 +40,7 @@ async def generate_for_plan(session: AsyncSession, plan: Plan, week_start: date)
         else:
             agg[key] = (agg.get(key) or 0.0) + ing.quantity * WEEK_MULTIPLIER
 
-    sl = ShoppingList(plan_id=plan.id, week_start=week_start)
+    sl = ShoppingList(user_id=user_id, plan_id=plan.id, week_start=week_start)
     session.add(sl)
     await session.flush()
     for (name, unit), qty in sorted(agg.items()):

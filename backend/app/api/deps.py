@@ -1,9 +1,10 @@
 """Shared API dependencies."""
 
-from typing import Annotated
+from typing import Annotated, Any, TypeVar
 
 from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from sqlalchemy import Select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_session
@@ -13,6 +14,20 @@ from app.security import decode_token
 _bearer = HTTPBearer(auto_error=False)
 
 SessionDep = Annotated[AsyncSession, Depends(get_session)]
+
+_TSel = TypeVar("_TSel", bound=tuple[Any, ...])
+
+
+def owned(stmt: Select[_TSel], model: Any, user: User) -> Select[_TSel]:
+    """Scope a SELECT to the given user's rows.
+
+    The single choke point for owner isolation: every domain read passes its statement
+    through here so the `user_id == user.id` filter can't be silently omitted. Fail-closed
+    by construction — a query that forgets to call this returns nothing useful in the
+    isolation test matrix (U11) rather than leaking another user's data.
+    """
+    return stmt.where(model.user_id == user.id)
+
 
 # Trainers may read (GET/HEAD/OPTIONS) everything and use the assistant chat, but may
 # not mutate anything and may not touch settings at all.

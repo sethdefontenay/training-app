@@ -3,17 +3,19 @@
 from datetime import date
 
 from httpx import AsyncClient
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models import Session, SetEntry
+from app.models import Session, SetEntry, User
 from app.services.workouts import get_or_create_exercise
 
 
 async def _seed_session(
     session: AsyncSession, slug: str, day: date, sets: list[tuple[str | None, str]]
 ) -> None:
-    ex = await get_or_create_exercise(session, slug)
-    s = Session(date=day, weekday=day.strftime("%A"))
+    uid = int(await session.scalar(select(User.id).order_by(User.id).limit(1)))
+    ex = await get_or_create_exercise(session, slug, uid)
+    s = Session(user_id=uid, date=day, weekday=day.strftime("%A"))
     session.add(s)
     await session.flush()
     for i, (weight, reps) in enumerate(sets, start=1):

@@ -65,7 +65,9 @@ class _Bolus:
     units: float
 
 
-async def daily_series(session: AsyncSession, day: date, tz: ZoneInfo) -> dict[str, object]:
+async def daily_series(
+    session: AsyncSession, day: date, tz: ZoneInfo, user_id: int
+) -> dict[str, object]:
     """Glucose trace, IOB line, and meal/workout markers for one local day."""
     local_start = datetime.combine(day, time.min, tzinfo=tz)
     local_end = local_start + timedelta(days=1)
@@ -74,7 +76,9 @@ async def daily_series(session: AsyncSession, day: date, tz: ZoneInfo) -> dict[s
     grows = (
         await session.execute(
             select(GlucoseReading.ts, GlucoseReading.mmol_l)
-            .where(GlucoseReading.ts >= lo, GlucoseReading.ts < hi)
+            .where(
+                GlucoseReading.ts >= lo, GlucoseReading.ts < hi, GlucoseReading.user_id == user_id
+            )
             .order_by(GlucoseReading.ts)
         )
     ).all()
@@ -83,7 +87,10 @@ async def daily_series(session: AsyncSession, day: date, tz: ZoneInfo) -> dict[s
     brows = (
         await session.execute(
             select(InsulinEvent.ts, InsulinEvent.units).where(
-                InsulinEvent.kind == "bolus", InsulinEvent.ts >= blo, InsulinEvent.ts < hi
+                InsulinEvent.kind == "bolus",
+                InsulinEvent.ts >= blo,
+                InsulinEvent.ts < hi,
+                InsulinEvent.user_id == user_id,
             )
         )
     ).all()
@@ -120,6 +127,7 @@ async def daily_series(session: AsyncSession, day: date, tz: ZoneInfo) -> dict[s
                 MealCheck.date == day,
                 MealCheck.eaten.is_(True),
                 MealCheck.checked_at.is_not(None),
+                MealCheck.user_id == user_id,
             )
         )
     ).all()
@@ -133,7 +141,7 @@ async def daily_series(session: AsyncSession, day: date, tz: ZoneInfo) -> dict[s
             await session.execute(
                 select(SetEntry.created_at)
                 .join(Session, Session.id == SetEntry.session_id)
-                .where(Session.date == day)
+                .where(Session.date == day, Session.user_id == user_id)
             )
         )
         .scalars()
@@ -156,7 +164,7 @@ async def daily_series(session: AsyncSession, day: date, tz: ZoneInfo) -> dict[s
 
 
 async def trend_series(
-    session: AsyncSession, start: date, end: date, tz: ZoneInfo
+    session: AsyncSession, start: date, end: date, tz: ZoneInfo, user_id: int
 ) -> dict[str, object]:
     """Per-day average BG and time-in-range across [start, end] (inclusive), local days."""
     local_start = datetime.combine(start, time.min, tzinfo=tz)
@@ -166,7 +174,7 @@ async def trend_series(
     rows = (
         await session.execute(
             select(GlucoseReading.ts, GlucoseReading.mmol_l).where(
-                GlucoseReading.ts >= lo, GlucoseReading.ts < hi
+                GlucoseReading.ts >= lo, GlucoseReading.ts < hi, GlucoseReading.user_id == user_id
             )
         )
     ).all()

@@ -31,6 +31,7 @@ async def chat(body: ChatIn, session: SessionDep, user: CurrentUser) -> ChatOut:
         result = await run_chat(
             session,
             [m.model_dump() for m in body.messages],
+            user_id=user.id,
             read_only=user.role == "trainer",
         )
     except AssistantNotConfigured as e:

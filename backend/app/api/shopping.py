@@ -6,7 +6,7 @@ from fastapi import APIRouter, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 
-from app.api.deps import CurrentUser, SessionDep
+from app.api.deps import CurrentUser, SessionDep, owned
 from app.clock import local_today
 from app.models import ShoppingItem, ShoppingList
 from app.schemas.shopping import CheckItem, ShoppingItemOut, ShoppingListOut
@@ -33,12 +33,12 @@ def _week_start(today: date) -> date:
     return today - timedelta(days=today.weekday())
 
 
-async def _latest_for_current_plan(session: SessionDep) -> ShoppingList | None:
-    plan = await current_plan(session)
+async def _latest_for_current_plan(session: SessionDep, user: CurrentUser) -> ShoppingList | None:
+    plan = await current_plan(session, user.id)
     if plan is None:
         return None
     result: ShoppingList | None = await session.scalar(
-        select(ShoppingList)
+        owned(select(ShoppingList), ShoppingList, user)
         .where(ShoppingList.plan_id == plan.id)
         .order_by(ShoppingList.week_start.desc(), ShoppingList.id.desc())
         .options(selectinload(ShoppingList.items))
@@ -49,12 +49,12 @@ async def _latest_for_current_plan(session: SessionDep) -> ShoppingList | None:
 
 @router.get("", response_model=ShoppingListOut)
 async def get_shopping(session: SessionDep, user: CurrentUser) -> ShoppingListOut:
-    sl = await _latest_for_current_plan(session)
+    sl = await _latest_for_current_plan(session, user)
     if sl is None:
-        plan = await current_plan(session)
+        plan = await current_plan(session, user.id)
         if plan is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No active plan")
-        sl = await generate_for_plan(session, plan, _week_start(local_today()))
+        sl = await generate_for_plan(session, plan, _week_start(local_today()), user.id)
         sl = await session.scalar(
             select(ShoppingList)
             .where(ShoppingList.id == sl.id)
@@ -68,7 +68,11 @@ async def get_shopping(session: SessionDep, user: CurrentUser) -> ShoppingListOu
 async def check_item(
     item_id: int, body: CheckItem, session: SessionDep, user: CurrentUser
 ) -> ShoppingItemOut:
-    item = await session.get(ShoppingItem, item_id)
+    item = await session.scalar(
+        select(ShoppingItem)
+        .join(ShoppingList, ShoppingItem.shopping_list_id == ShoppingList.id)
+        .where(ShoppingItem.id == item_id, ShoppingList.user_id == user.id)
+    )
     if item is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Item not found")
     item.checked = body.checked
@@ -81,12 +85,12 @@ async def check_item(
 
 @router.post("/regenerate", response_model=ShoppingListOut)
 async def regenerate(session: SessionDep, user: CurrentUser) -> ShoppingListOut:
-    plan = await current_plan(session)
+    plan = await current_plan(session, user.id)
     if plan is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No active plan")
-    created = await generate_for_plan(session, plan, _week_start(local_today()))
+    created = await generate_for_plan(session, plan, _week_start(local_today()), user.id)
     reloaded: ShoppingList | None = await session.scalar(
-        select(ShoppingList)
+        owned(select(ShoppingList), ShoppingList, user)
         .where(ShoppingList.id == created.id)
         .options(selectinload(ShoppingList.items))
     )

@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.plans import get_agent, get_gmail
 from app.integrations.ingest import PlanEmail
 from app.main import app
-from app.models import Plan
+from app.models import Plan, User
 from app.schemas.plan_ingest import (
     ProposedIngredient,
     ProposedMeal,
@@ -89,7 +89,8 @@ async def test_ingest_proposes_without_committing(
 async def test_commit_creates_current_and_archives_old(
     auth_client: AsyncClient, session: AsyncSession
 ) -> None:
-    session.add(Plan(start_date=date(2026, 5, 21), is_current=True, source="old"))
+    uid = int(await session.scalar(select(User.id).order_by(User.id).limit(1)))
+    session.add(Plan(user_id=uid, start_date=date(2026, 5, 21), is_current=True, source="old"))
     await session.commit()
     resp = await auth_client.post(
         "/api/v1/plans/commit",

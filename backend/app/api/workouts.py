@@ -6,7 +6,7 @@ from fastapi import APIRouter, HTTPException, status
 from sqlalchemy import func, select
 from sqlalchemy.orm import selectinload
 
-from app.api.deps import CurrentUser, SessionDep
+from app.api.deps import CurrentUser, SessionDep, owned
 from app.models import Session, SetEntry
 from app.schemas.workouts import (
     ExerciseProgress,
@@ -48,9 +48,9 @@ def _session_read(s: Session) -> SessionRead:
     )
 
 
-async def _session_with_sets(session: SessionDep, day: date) -> Session | None:
+async def _session_with_sets(session: SessionDep, day: date, user: CurrentUser) -> Session | None:
     s: Session | None = await session.scalar(
-        select(Session)
+        owned(select(Session), Session, user)
         .where(Session.date == day)
         .options(selectinload(Session.sets).selectinload(SetEntry.exercise))
     )
@@ -64,10 +64,11 @@ async def create_session(
     # One workout per day: if a session already exists for this date, return it (with
     # its logged sets) rather than creating a duplicate. This keeps the log-workout
     # screen idempotent across navigations.
-    existing = await _session_with_sets(session, body.date)
+    existing = await _session_with_sets(session, body.date, user)
     if existing is not None:
         return _session_read(existing)
     s = Session(
+        user_id=user.id,
         date=body.date,
         weekday=body.date.strftime("%A"),
         training_day_id=body.training_day_id,
@@ -82,13 +83,13 @@ async def create_session(
 async def get_session_by_date(
     day: date, session: SessionDep, user: CurrentUser
 ) -> SessionRead | None:
-    s = await _session_with_sets(session, day)
+    s = await _session_with_sets(session, day, user)
     return _session_read(s) if s is not None else None
 
 
 @router.get("/sessions", response_model=list[SessionSummary])
 async def list_workout_sessions(session: SessionDep, user: CurrentUser) -> list[SessionSummary]:
-    return [SessionSummary(**s) for s in await list_sessions(session)]
+    return [SessionSummary(**s) for s in await list_sessions(session, user.id)]
 
 
 @router.get("/sessions/{session_id}", response_model=SessionRead)
@@ -96,7 +97,7 @@ async def get_session_detail(
     session_id: int, session: SessionDep, user: CurrentUser
 ) -> SessionRead:
     s = await session.scalar(
-        select(Session)
+        owned(select(Session), Session, user)
         .where(Session.id == session_id)
         .options(selectinload(Session.sets).selectinload(SetEntry.exercise))
     )
@@ -113,10 +114,10 @@ async def get_session_detail(
 async def log_set(
     session_id: int, body: SetCreate, session: SessionDep, user: CurrentUser
 ) -> SetRead:
-    s = await session.get(Session, session_id)
+    s = await session.scalar(owned(select(Session), Session, user).where(Session.id == session_id))
     if s is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Session not found")
-    ex = await get_or_create_exercise(session, body.exercise_slug)
+    ex = await get_or_create_exercise(session, body.exercise_slug, user.id)
     if body.set_index is not None:
         index = body.set_index
     else:
@@ -142,7 +143,10 @@ async def log_set(
 @router.patch("/sets/{set_id}", response_model=SetRead)
 async def edit_set(set_id: int, body: SetUpdate, session: SessionDep, user: CurrentUser) -> SetRead:
     entry = await session.scalar(
-        select(SetEntry).where(SetEntry.id == set_id).options(selectinload(SetEntry.exercise))
+        select(SetEntry)
+        .join(Session, SetEntry.session_id == Session.id)
+        .where(SetEntry.id == set_id, Session.user_id == user.id)
+        .options(selectinload(SetEntry.exercise))
     )
     if entry is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Set not found")
@@ -157,7 +161,11 @@ async def edit_set(set_id: int, body: SetUpdate, session: SessionDep, user: Curr
 
 @router.delete("/sets/{set_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_set(set_id: int, session: SessionDep, user: CurrentUser) -> None:
-    entry = await session.get(SetEntry, set_id)
+    entry = await session.scalar(
+        select(SetEntry)
+        .join(Session, SetEntry.session_id == Session.id)
+        .where(SetEntry.id == set_id, Session.user_id == user.id)
+    )
     if entry is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Set not found")
     await session.delete(entry)
@@ -166,12 +174,12 @@ async def delete_set(set_id: int, session: SessionDep, user: CurrentUser) -> Non
 
 @router.get("/exercises/{slug}/last-week", response_model=LastWeek)
 async def last_week(slug: str, before: date, session: SessionDep, user: CurrentUser) -> LastWeek:
-    return LastWeek(display=await last_week_display(session, slug, before))
+    return LastWeek(display=await last_week_display(session, slug, before, user.id))
 
 
 @router.get("/exercises/{slug}/progress", response_model=ExerciseProgress)
 async def exercise_progress(slug: str, session: SessionDep, user: CurrentUser) -> ExerciseProgress:
-    result = await progress_series(session, slug)
+    result = await progress_series(session, slug, user.id)
     if result is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Exercise not found")
     name, metric, points = result

@@ -5,10 +5,10 @@ from datetime import date
 from sqlalchemy import Date, ForeignKey, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from app.models.base import Base, TimestampMixin
+from app.models.base import Base, OwnedMixin, TimestampMixin
 
 
-class CheckIn(Base, TimestampMixin):
+class CheckIn(OwnedMixin, Base, TimestampMixin):
     __tablename__ = "check_in"
 
     id: Mapped[int] = mapped_column(primary_key=True)

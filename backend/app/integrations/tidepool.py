@@ -98,19 +98,29 @@ def _bounds(start: date, end: date) -> tuple[datetime, datetime]:
 
 
 async def sync_diabetes(
-    session: AsyncSession, provider: TidepoolProvider, start: date, end: date
+    session: AsyncSession, provider: TidepoolProvider, start: date, end: date, user_id: int
 ) -> DiabetesSyncResult:
     glucose, insulin = await provider.fetch(start, end)
     lo, hi = _bounds(start, end)
-    # Idempotent: clear the window, then insert the fresh pull.
+    # Idempotent: clear THIS user's window, then insert the fresh pull.
     await session.execute(
-        delete(GlucoseReading).where(GlucoseReading.ts >= lo, GlucoseReading.ts <= hi)
+        delete(GlucoseReading).where(
+            GlucoseReading.ts >= lo, GlucoseReading.ts <= hi, GlucoseReading.user_id == user_id
+        )
     )
-    await session.execute(delete(InsulinEvent).where(InsulinEvent.ts >= lo, InsulinEvent.ts <= hi))
+    await session.execute(
+        delete(InsulinEvent).where(
+            InsulinEvent.ts >= lo, InsulinEvent.ts <= hi, InsulinEvent.user_id == user_id
+        )
+    )
     for g in glucose:
-        session.add(GlucoseReading(ts=_norm(g.ts), mmol_l=g.mmol_l))
+        session.add(GlucoseReading(user_id=user_id, ts=_norm(g.ts), mmol_l=g.mmol_l))
     for i in insulin:
-        session.add(InsulinEvent(ts=_norm(i.ts), kind=i.kind, units=i.units, carbs_g=i.carbs_g))
+        session.add(
+            InsulinEvent(
+                user_id=user_id, ts=_norm(i.ts), kind=i.kind, units=i.units, carbs_g=i.carbs_g
+            )
+        )
     await session.commit()
     return DiabetesSyncResult(
         glucose=len(glucose), insulin=len(insulin), pump_uploaded=len(insulin) > 0
@@ -118,14 +128,16 @@ async def sync_diabetes(
 
 
 async def glucose_summary(
-    session: AsyncSession, start: date, end: date
+    session: AsyncSession, start: date, end: date, user_id: int
 ) -> dict[str, float | int | None]:
     lo, hi = _bounds(start, end)
     values = (
         (
             await session.execute(
                 select(GlucoseReading.mmol_l).where(
-                    GlucoseReading.ts >= lo, GlucoseReading.ts <= hi
+                    GlucoseReading.ts >= lo,
+                    GlucoseReading.ts <= hi,
+                    GlucoseReading.user_id == user_id,
                 )
             )
         )
@@ -185,9 +197,13 @@ def _norm(dt: datetime) -> datetime:
 
 
 async def store_points(
-    session: AsyncSession, glucose: list[GlucosePoint], insulin: list[InsulinPoint]
+    session: AsyncSession,
+    glucose: list[GlucosePoint],
+    insulin: list[InsulinPoint],
+    user_id: int,
 ) -> tuple[int, int]:
-    """Insert points, de-duplicated by timestamp (re-uploads + incremental files safe)."""
+    """Insert points, de-duplicated by timestamp within THIS user's rows (re-uploads +
+    incremental files safe)."""
     g_added = 0
     if glucose:
         times = [_norm(g.ts) for g in glucose]
@@ -195,7 +211,9 @@ async def store_points(
             (
                 await session.execute(
                     select(GlucoseReading.ts).where(
-                        GlucoseReading.ts >= min(times), GlucoseReading.ts <= max(times)
+                        GlucoseReading.ts >= min(times),
+                        GlucoseReading.ts <= max(times),
+                        GlucoseReading.user_id == user_id,
                     )
                 )
             )
@@ -204,7 +222,9 @@ async def store_points(
         )
         for gp, ts in zip(glucose, times, strict=True):
             if ts not in seen:
-                session.add(GlucoseReading(ts=ts, mmol_l=gp.mmol_l, source=UPLOAD_SOURCE))
+                session.add(
+                    GlucoseReading(user_id=user_id, ts=ts, mmol_l=gp.mmol_l, source=UPLOAD_SOURCE)
+                )
                 seen.add(ts)
                 g_added += 1
     i_added = 0
@@ -214,7 +234,9 @@ async def store_points(
             (
                 await session.execute(
                     select(InsulinEvent.ts).where(
-                        InsulinEvent.ts >= min(times), InsulinEvent.ts <= max(times)
+                        InsulinEvent.ts >= min(times),
+                        InsulinEvent.ts <= max(times),
+                        InsulinEvent.user_id == user_id,
                     )
                 )
             )
@@ -225,6 +247,7 @@ async def store_points(
             if ts not in seen:
                 session.add(
                     InsulinEvent(
+                        user_id=user_id,
                         ts=ts,
                         kind=ip.kind,
                         units=ip.units,
@@ -238,12 +261,14 @@ async def store_points(
     return g_added, i_added
 
 
-async def insulin_count(session: AsyncSession, start: date, end: date) -> int:
+async def insulin_count(session: AsyncSession, start: date, end: date, user_id: int) -> int:
     lo, hi = _bounds(start, end)
     rows = (
         (
             await session.execute(
-                select(InsulinEvent.id).where(InsulinEvent.ts >= lo, InsulinEvent.ts <= hi)
+                select(InsulinEvent.id).where(
+                    InsulinEvent.ts >= lo, InsulinEvent.ts <= hi, InsulinEvent.user_id == user_id
+                )
             )
         )
         .scalars()

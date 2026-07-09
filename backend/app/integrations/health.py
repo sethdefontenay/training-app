@@ -206,18 +206,20 @@ class SyncResult:
 
 
 async def sync_steps_sleep(
-    session: AsyncSession, provider: HealthProvider, start: date, end: date
+    session: AsyncSession, provider: HealthProvider, start: date, end: date, user_id: int
 ) -> SyncResult:
     steps, sleeps = await provider.fetch(start, end)
     result = SyncResult()
 
     for rec in steps:
-        row = await session.scalar(select(StepsDay).where(StepsDay.date == rec.date))
+        row = await session.scalar(
+            select(StepsDay).where(StepsDay.date == rec.date, StepsDay.user_id == user_id)
+        )
         if row is not None and row.manual:
             result.preserved_manual.append(rec.date.isoformat())
             continue
         if row is None:
-            row = StepsDay(date=rec.date)
+            row = StepsDay(user_id=user_id, date=rec.date)
             session.add(row)
         row.steps = rec.steps
         if rec.target_steps is not None:
@@ -226,11 +228,13 @@ async def sync_steps_sleep(
         result.steps_synced += 1
 
     for night in sleeps:
-        srow = await session.scalar(select(SleepNight).where(SleepNight.date == night.date))
+        srow = await session.scalar(
+            select(SleepNight).where(SleepNight.date == night.date, SleepNight.user_id == user_id)
+        )
         if srow is not None and srow.manual:
             continue
         if srow is None:
-            srow = SleepNight(date=night.date)
+            srow = SleepNight(user_id=user_id, date=night.date)
             session.add(srow)
         srow.asleep_min = night.asleep_min
         srow.in_bed_min = night.in_bed_min

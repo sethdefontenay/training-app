@@ -7,14 +7,24 @@ plan is current at a time; old plans are archived (is_current=False) but kept.
 
 from datetime import date
 
-from sqlalchemy import ForeignKey, Text
+from sqlalchemy import ForeignKey, Index, Text, UniqueConstraint, text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from app.models.base import Base, TimestampMixin
+from app.models.base import Base, OwnedMixin, TimestampMixin
 
 
-class Plan(Base, TimestampMixin):
+class Plan(OwnedMixin, Base, TimestampMixin):
     __tablename__ = "plan"
+    # At most one current plan per user (partial unique index on the owner).
+    __table_args__ = (
+        Index(
+            "uq_plan_current_per_user",
+            "user_id",
+            unique=True,
+            sqlite_where=text("is_current"),
+            postgresql_where=text("is_current"),
+        ),
+    )
 
     id: Mapped[int] = mapped_column(primary_key=True)
     phase: Mapped[int | None] = mapped_column(default=None)
@@ -43,12 +53,34 @@ class Plan(Base, TimestampMixin):
 
 
 class Exercise(Base, TimestampMixin):
-    """Global exercise catalog (resistance + mobility share this where useful)."""
+    """Exercise catalog: a shared base (owner_id IS NULL, readable by everyone) plus
+    per-user custom exercises (owner_id set). Slug uniqueness is split — globally
+    unique among base rows, and unique per owner among custom rows — so a user's custom
+    exercise may reuse a base slug without colliding. See U4 for the merged read path.
+    """
 
     __tablename__ = "exercise"
+    __table_args__ = (
+        # Per-owner uniqueness for custom rows. NULL owner_ids are distinct under both
+        # Postgres and SQLite, so this does NOT constrain base rows — the partial index
+        # below enforces global-slug uniqueness for those.
+        UniqueConstraint("owner_id", "slug", name="uq_exercise_owner_slug"),
+        Index(
+            "uq_exercise_global_slug",
+            "slug",
+            unique=True,
+            sqlite_where=text("owner_id IS NULL"),
+            postgresql_where=text("owner_id IS NULL"),
+        ),
+        Index("ix_exercise_slug", "slug"),
+    )
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    slug: Mapped[str] = mapped_column(unique=True, index=True)
+    # NULL = shared base catalog; set = a user's private custom exercise.
+    owner_id: Mapped[int | None] = mapped_column(
+        ForeignKey("user.id", ondelete="CASCADE"), default=None, index=True
+    )
+    slug: Mapped[str]
     name: Mapped[str]
     is_bodyweight: Mapped[bool] = mapped_column(default=False)
     notes: Mapped[str | None] = mapped_column(Text, default=None)

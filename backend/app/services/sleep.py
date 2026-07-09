@@ -8,19 +8,21 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models import SleepNight
 
 
-async def latest_night_date(session: AsyncSession) -> date | None:
+async def latest_night_date(session: AsyncSession, user_id: int) -> date | None:
     d: date | None = await session.scalar(
         select(SleepNight.date)
-        .where(SleepNight.asleep_min.is_not(None))
+        .where(SleepNight.asleep_min.is_not(None), SleepNight.user_id == user_id)
         .order_by(SleepNight.date.desc())
         .limit(1)
     )
     return d
 
 
-async def night_view(session: AsyncSession, day: date) -> dict[str, object]:
+async def night_view(session: AsyncSession, day: date, user_id: int) -> dict[str, object]:
     """One night: totals, efficiency, and stage segments as minutes-since-first-stage."""
-    row = await session.scalar(select(SleepNight).where(SleepNight.date == day))
+    row = await session.scalar(
+        select(SleepNight).where(SleepNight.date == day, SleepNight.user_id == user_id)
+    )
     if row is None:
         return {"date": day.isoformat(), "found": False}
 
@@ -57,13 +59,17 @@ async def night_view(session: AsyncSession, day: date) -> dict[str, object]:
     }
 
 
-async def trend(session: AsyncSession, start: date, end: date) -> dict[str, object]:
+async def trend(session: AsyncSession, start: date, end: date, user_id: int) -> dict[str, object]:
     """Per-night stage breakdown + averages across [start, end] (inclusive)."""
     rows = (
         (
             await session.execute(
                 select(SleepNight)
-                .where(SleepNight.date >= start, SleepNight.date <= end)
+                .where(
+                    SleepNight.date >= start,
+                    SleepNight.date <= end,
+                    SleepNight.user_id == user_id,
+                )
                 .order_by(SleepNight.date)
             )
         )
