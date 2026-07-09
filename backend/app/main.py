@@ -15,6 +15,7 @@ from app.api import (
     daily,
     diabetes,
     imports,
+    invites,
     plans,
     shopping,
     sleep,
@@ -79,6 +80,7 @@ async def ping() -> dict[str, str]:
 
 # Universal surface (every user): workouts, tracking, daily, shopping, assistant.
 api_v1.include_router(auth.router)
+api_v1.include_router(invites.router)
 api_v1.include_router(workouts.router)
 api_v1.include_router(tracking.router)
 api_v1.include_router(daily.router)
