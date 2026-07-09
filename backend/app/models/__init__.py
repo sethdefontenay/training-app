@@ -14,6 +14,7 @@ from app.models.plan import (
     TrainingDay,
     WeekdaySchedule,
 )
+from app.models.program import ProgramExercise, WeekdayProgram, WorkoutProgram
 from app.models.shopping import ShoppingItem, ShoppingList
 from app.models.training_log import MealCheck, MobilityDone, Session, SetEntry
 from app.models.user import User
@@ -37,6 +38,7 @@ __all__ = [
     "MobilityDone",
     "Plan",
     "Prescription",
+    "ProgramExercise",
     "ShoppingItem",
     "ShoppingList",
     "SleepNight",
@@ -45,5 +47,7 @@ __all__ = [
     "StepsDay",
     "TrainingDay",
     "User",
+    "WeekdayProgram",
     "WeekdaySchedule",
+    "WorkoutProgram",
 ]
