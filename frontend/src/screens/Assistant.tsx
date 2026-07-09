@@ -7,6 +7,23 @@ const Markdown = lazy(() => import("../Markdown"));
 
 type Msg = { role: "user" | "assistant"; content: string };
 
+// Minimal typing for the browser SpeechRecognition API (not in the default TS lib).
+type SpeechResult = { transcript: string };
+interface SpeechRecognizer {
+  lang: string;
+  interimResults: boolean;
+  continuous: boolean;
+  start(): void;
+  stop(): void;
+  onresult: ((e: { results: ArrayLike<ArrayLike<SpeechResult>> }) => void) | null;
+  onend: (() => void) | null;
+  onerror: (() => void) | null;
+}
+type SpeechRecognizerCtor = new () => SpeechRecognizer;
+const SpeechRecognitionCtor: SpeechRecognizerCtor | undefined =
+  (window as unknown as { SpeechRecognition?: SpeechRecognizerCtor }).SpeechRecognition ??
+  (window as unknown as { webkitSpeechRecognition?: SpeechRecognizerCtor }).webkitSpeechRecognition;
+
 /** Floating assistant: a bottom-right button that opens a chat drawer. Mounted
  * once in the Layout so it's available (and keeps its conversation) on every screen. */
 export default function Assistant() {
@@ -15,7 +32,30 @@ export default function Assistant() {
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [listening, setListening] = useState(false);
   const endRef = useRef<HTMLDivElement>(null);
+  const recRef = useRef<SpeechRecognizer | null>(null);
+
+  const toggleMic = () => {
+    if (!SpeechRecognitionCtor) return;
+    if (listening) {
+      recRef.current?.stop();
+      return;
+    }
+    const rec = new SpeechRecognitionCtor();
+    rec.lang = "en-US";
+    rec.interimResults = false;
+    rec.continuous = false;
+    rec.onresult = (e) => {
+      const said = e.results[0][0].transcript;
+      setInput((cur) => (cur ? cur + " " : "") + said);
+    };
+    rec.onend = () => setListening(false);
+    rec.onerror = () => setListening(false);
+    recRef.current = rec;
+    rec.start();
+    setListening(true);
+  };
 
   const send = async () => {
     const text = input.trim();
@@ -111,10 +151,22 @@ export default function Assistant() {
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && send()}
-          placeholder="Ask a question…"
+          placeholder={listening ? "Listening…" : "Ask a question…"}
           disabled={busy}
           className="flex-1 rounded bg-slate-700 px-3 py-2 text-sm disabled:opacity-50"
         />
+        {SpeechRecognitionCtor && (
+          <button
+            onClick={toggleMic}
+            disabled={busy}
+            aria-label={listening ? "Stop voice input" : "Start voice input"}
+            className={`rounded px-3 py-2 text-sm disabled:opacity-50 ${
+              listening ? "animate-pulse bg-rose-600" : "bg-slate-700 hover:bg-slate-600"
+            }`}
+          >
+            🎤
+          </button>
+        )}
         <button
           onClick={send}
           disabled={busy || !input.trim()}

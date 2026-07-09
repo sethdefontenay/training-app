@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Outlet, useNavigate } from "react-router-dom";
 import { get } from "./api";
 import { useAuth } from "./auth";
+import ChangelogModal from "./ChangelogModal";
 import Assistant from "./screens/Assistant";
 
 /** App-wide banner shown when the Google Health refresh token has expired, with a
@@ -66,6 +67,7 @@ export default function Layout() {
         <Outlet />
       </main>
       <Assistant />
+      <ChangelogModal />
     </div>
   );
 }
