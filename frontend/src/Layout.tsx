@@ -36,11 +36,11 @@ function ReconnectBanner() {
 
 export default function Layout() {
   const nav = useNavigate();
-  const { logout, readOnly } = useAuth();
+  const { logout, caps } = useAuth();
   return (
     <div className="min-h-screen bg-slate-900 text-slate-100">
-      {/* Owner-only: it manages the owner's Google Health connection (and 403s for trainers). */}
-      {!readOnly && <ReconnectBanner />}
+      {/* Only relevant to users with the Google Health integration enabled. */}
+      {caps.hasHealthIntegrations && <ReconnectBanner />}
       <header className="flex items-center gap-2 border-b border-slate-700 p-3">
         <button
           onClick={() => nav("/")}

@@ -2,13 +2,36 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 import { get, getToken, post, setToken } from "./api";
 
-type Role = "owner" | "trainer";
+export type Capabilities = {
+  isAdmin: boolean;
+  hasDiabetes: boolean;
+  hasHealthIntegrations: boolean;
+  hasCheckins: boolean;
+};
+
+// Fail-closed default: no capabilities until /auth/me confirms them, so gated screens
+// (T1D, health integrations, check-ins) never flash for a user who shouldn't see them.
+const NO_CAPS: Capabilities = {
+  isAdmin: false,
+  hasDiabetes: false,
+  hasHealthIntegrations: false,
+  hasCheckins: false,
+};
+
+type MeResponse = {
+  is_admin: boolean;
+  has_diabetes: boolean;
+  has_health_integrations: boolean;
+  has_checkins: boolean;
+};
 
 type AuthCtx = {
   isAuthed: boolean;
-  role: Role | null; // null while /auth/me is still resolving
-  readOnly: boolean; // trainer logins are read-only everywhere except the assistant chat
+  ready: boolean; // /auth/me resolved (capabilities known)
+  caps: Capabilities;
+  readOnly: boolean; // retained for screens; always false since the trainer role was retired
   login: (email: string, password: string) => Promise<void>;
+  register: (email: string, password: string, code: string) => Promise<void>;
   logout: () => void;
 };
 
@@ -16,18 +39,25 @@ const Ctx = createContext<AuthCtx | null>(null);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [isAuthed, setAuthed] = useState(() => !!getToken());
-  const [role, setRole] = useState<Role | null>(null);
+  const [ready, setReady] = useState(false);
+  const [caps, setCaps] = useState<Capabilities>(NO_CAPS);
 
-  // Resolve the role whenever we become authed. Fail CLOSED: if /auth/me can't be read
-  // we assume the least-privileged (read-only) role rather than handing out the owner UI
-  // on an unknown state. (The backend guard is the real boundary regardless; this only
-  // drives UI gating.) logout() clears role; we don't reset it synchronously here to
-  // avoid a cascading render.
+  // Resolve capabilities whenever we become authed. Fail CLOSED: if /auth/me can't be
+  // read, keep NO_CAPS so no gated surface is shown. The backend is the real boundary;
+  // this only drives which screens the UI offers.
   useEffect(() => {
-    if (!isAuthed) return;
-    get<{ role: Role }>("/auth/me")
-      .then((m) => setRole(m.role === "owner" ? "owner" : "trainer"))
-      .catch(() => setRole("trainer"));
+    if (!isAuthed) return; // logout() already resets ready/caps; nothing to fetch
+    get<MeResponse>("/auth/me")
+      .then((m) =>
+        setCaps({
+          isAdmin: !!m.is_admin,
+          hasDiabetes: !!m.has_diabetes,
+          hasHealthIntegrations: !!m.has_health_integrations,
+          hasCheckins: !!m.has_checkins,
+        }),
+      )
+      .catch(() => setCaps(NO_CAPS))
+      .finally(() => setReady(true));
   }, [isAuthed]);
 
   const login = async (email: string, password: string) => {
@@ -35,14 +65,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setToken(r.access_token);
     setAuthed(true);
   };
+  const register = async (email: string, password: string, code: string) => {
+    const r = await post<{ access_token: string }>("/auth/register", { email, password, code });
+    setToken(r.access_token);
+    setAuthed(true);
+  };
   const logout = () => {
     setToken(null);
     setAuthed(false);
-    setRole(null);
+    setCaps(NO_CAPS);
+    setReady(false);
   };
 
   return (
-    <Ctx.Provider value={{ isAuthed, role, readOnly: role === "trainer", login, logout }}>
+    <Ctx.Provider
+      value={{ isAuthed, ready, caps, readOnly: false, login, register, logout }}
+    >
       {children}
     </Ctx.Provider>
   );

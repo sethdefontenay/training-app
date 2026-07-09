@@ -20,11 +20,11 @@ const ExerciseProgress = lazy(() => import("./screens/ExerciseProgress"));
 const Sleep = lazy(() => import("./screens/Sleep"));
 
 export default function App() {
-  const { isAuthed, role, readOnly } = useAuth();
+  const { isAuthed, ready, caps } = useAuth();
   if (!isAuthed) return <Login />;
-  // Hold rendering until the role is known so a trainer never momentarily sees the
-  // owner-only UI (Settings link, write controls) before it's gated.
-  if (role === null) return <p className="p-6 text-slate-400">Loading…</p>;
+  // Hold rendering until capabilities are known so a standard user never momentarily
+  // sees a gated screen (T1D, health integrations, check-ins) before it's gated.
+  if (!ready) return <p className="p-6 text-slate-400">Loading…</p>;
   return (
     <Routes>
       <Route element={<Layout />}>
@@ -33,14 +33,21 @@ export default function App() {
         <Route path="/workout" element={<Workout />} />
         <Route path="/history" element={<WorkoutHistory />} />
         <Route path="/measurements" element={<Measurements />} />
-        <Route path="/check-in" element={<CheckIn />} />
+        <Route
+          path="/check-in"
+          element={caps.hasCheckins ? <CheckIn /> : <Navigate to="/" replace />}
+        />
         <Route path="/shopping" element={<Shopping />} />
         <Route
           path="/diabetes"
           element={
-            <Suspense fallback={<p className="text-slate-400">Loading…</p>}>
-              <Diabetes />
-            </Suspense>
+            caps.hasDiabetes ? (
+              <Suspense fallback={<p className="text-slate-400">Loading…</p>}>
+                <Diabetes />
+              </Suspense>
+            ) : (
+              <Navigate to="/" replace />
+            )
           }
         />
         <Route
@@ -54,15 +61,19 @@ export default function App() {
         <Route
           path="/sleep"
           element={
-            <Suspense fallback={<p className="text-slate-400">Loading…</p>}>
-              <Sleep />
-            </Suspense>
+            caps.hasHealthIntegrations ? (
+              <Suspense fallback={<p className="text-slate-400">Loading…</p>}>
+                <Sleep />
+              </Suspense>
+            ) : (
+              <Navigate to="/" replace />
+            )
           }
         />
         <Route path="/plan" element={<Plan />} />
         <Route
           path="/settings"
-          element={readOnly ? <Navigate to="/" replace /> : <Settings />}
+          element={caps.hasHealthIntegrations ? <Settings /> : <Navigate to="/" replace />}
         />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>

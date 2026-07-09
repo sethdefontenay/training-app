@@ -1,31 +1,43 @@
 import { Link } from "react-router-dom";
-import { useAuth } from "../auth";
+import { useAuth, type Capabilities } from "../auth";
 
-const AREAS = [
+// `cap` gates a tile on a capability flag; tiles with no `cap` are universal.
+const AREAS: {
+  to: string;
+  label: string;
+  hint: string;
+  primary?: boolean;
+  cap?: keyof Capabilities;
+}[] = [
   { to: "/today", label: "Today", hint: "activities, meals & wellbeing", primary: true },
   { to: "/shopping", label: "Weekly shopping list", hint: "" },
-  { to: "/check-in", label: "Weekly check-in", hint: "for your PT" },
+  { to: "/check-in", label: "Weekly check-in", hint: "for your PT", cap: "hasCheckins" },
   { to: "/measurements", label: "Measurements", hint: "" },
-  { to: "/diabetes", label: "Diabetes record", hint: "glucose & insulin" },
-  { to: "/sleep", label: "Sleep", hint: "stages per night & weekly trends" },
+  { to: "/diabetes", label: "Diabetes record", hint: "glucose & insulin", cap: "hasDiabetes" },
+  {
+    to: "/sleep",
+    label: "Sleep",
+    hint: "stages per night & weekly trends",
+    cap: "hasHealthIntegrations",
+  },
   { to: "/exercises", label: "Exercise progress", hint: "weight over time by workout day" },
   { to: "/history", label: "Workout history", hint: "past sessions & sets" },
   { to: "/plan", label: "Current plan", hint: "" },
-  { to: "/settings", label: "Settings", hint: "connect Google Health" },
+  {
+    to: "/settings",
+    label: "Settings",
+    hint: "connect Google Health",
+    cap: "hasHealthIntegrations",
+  },
 ];
 
 export default function Home() {
-  const { readOnly } = useAuth();
-  // Trainers get a read-only view of everything except settings, which is hidden.
-  const areas = readOnly ? AREAS.filter((a) => a.to !== "/settings") : AREAS;
+  const { caps } = useAuth();
+  // Show a tile only when its capability is enabled (universal tiles have no cap).
+  const areas = AREAS.filter((a) => !a.cap || caps[a.cap]);
   return (
     <div className="space-y-4">
       <h1 className="text-2xl font-bold">Home</h1>
-      {readOnly && (
-        <p className="rounded bg-slate-800 px-3 py-2 text-sm text-slate-400">
-          Read-only coach view — you can see everything but can't make changes.
-        </p>
-      )}
       <div className="grid gap-3">
         {areas.map((a) => (
           <Link
