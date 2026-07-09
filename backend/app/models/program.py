@@ -4,10 +4,15 @@ the planner is the user's own, and drives the daily view when a weekday is assig
 falling back to the PT plan otherwise.
 """
 
+from typing import TYPE_CHECKING
+
 from sqlalchemy import ForeignKey, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base, OwnedMixin, TimestampMixin
+
+if TYPE_CHECKING:
+    from app.models.plan import Exercise
 
 
 class WorkoutProgram(OwnedMixin, Base, TimestampMixin):
@@ -42,6 +47,7 @@ class ProgramExercise(Base, TimestampMixin):
     order: Mapped[int] = mapped_column(default=0)
 
     program: Mapped[WorkoutProgram] = relationship(back_populates="exercises")
+    exercise: Mapped["Exercise"] = relationship()
 
 
 class WeekdayProgram(OwnedMixin, Base, TimestampMixin):

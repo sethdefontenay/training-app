@@ -1,7 +1,9 @@
 """Resolve the daily task list: today's plan content + logged state."""
 
 import re
+from collections.abc import Sequence
 from datetime import date
+from typing import Any
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -30,6 +32,7 @@ from app.schemas.daily import (
     WellbeingIn,
     WorkoutBlock,
 )
+from app.services.programs import program_for_weekday
 from app.services.workouts import NO_HISTORY, last_week_for_exercises
 
 
@@ -89,8 +92,19 @@ async def _workout_block(
     if td is None:
         return None
 
-    prescriptions = sorted(td.prescriptions, key=lambda x: x.order)
-    exercise_ids = [p.exercise_id for p in prescriptions]
+    return await _build_block(
+        session, td.label, sorted(td.prescriptions, key=lambda x: x.order), day, user_id
+    )
+
+
+async def _build_block(
+    session: AsyncSession, label: str, rows: Sequence[Any], day: date, user_id: int
+) -> WorkoutBlock:
+    """Build a WorkoutBlock from prescription-like rows (Prescription or ProgramExercise;
+    each exposes .exercise_id, .exercise (slug/name), .sets_x_reps, .prescribed_weight).
+    Completed-set counts and the last-week column come from the user's own sessions, so
+    they work identically whether the day is planner- or PT-plan-driven."""
+    exercise_ids = [r.exercise_id for r in rows]
 
     # Completed-set counts for today, all exercises in one grouped query (was N queries).
     sess = await session.scalar(
@@ -98,32 +112,39 @@ async def _workout_block(
     )
     completed_by_ex: dict[int, int] = {}
     if sess is not None:
-        rows = (
+        counted = (
             await session.execute(
                 select(SetEntry.exercise_id, func.count())
                 .where(SetEntry.session_id == sess.id)
                 .group_by(SetEntry.exercise_id)
             )
         ).all()
-        completed_by_ex = {row[0]: row[1] for row in rows}
+        completed_by_ex = {row[0]: row[1] for row in counted}
 
-    # Last-week numbers for every exercise in one query, computed server-side so the
-    # frontend no longer fires a request per exercise (the old N+1 + slow-load bug).
     last_weeks = await last_week_for_exercises(session, exercise_ids, day, user_id)
 
     lines = [
         ExerciseLine(
-            slug=p.exercise.slug,
-            name=p.exercise.name,
-            sets_x_reps=p.sets_x_reps,
-            prescribed_weight=p.prescribed_weight,
-            target_sets=_target_sets(p.sets_x_reps),
-            completed_sets=completed_by_ex.get(p.exercise_id, 0),
-            last_week=last_weeks.get(p.exercise_id, NO_HISTORY),
+            slug=r.exercise.slug,
+            name=r.exercise.name,
+            sets_x_reps=r.sets_x_reps,
+            prescribed_weight=r.prescribed_weight,
+            target_sets=_target_sets(r.sets_x_reps),
+            completed_sets=completed_by_ex.get(r.exercise_id, 0),
+            last_week=last_weeks.get(r.exercise_id, NO_HISTORY),
         )
-        for p in prescriptions
+        for r in rows
     ]
-    return WorkoutBlock(label=td.label, exercises=lines)
+    return WorkoutBlock(label=label, exercises=lines)
+
+
+async def _workout_block_from_program(
+    session: AsyncSession, program: Any, day: date, user_id: int
+) -> WorkoutBlock:
+    """Build the day's block from a user-owned program (planner path)."""
+    return await _build_block(
+        session, program.name, sorted(program.exercises, key=lambda e: e.order), day, user_id
+    )
 
 
 async def resolve_day(session: AsyncSession, day: date, user_id: int) -> DailyView:
@@ -136,11 +157,19 @@ async def resolve_day(session: AsyncSession, day: date, user_id: int) -> DailyVi
     daily_carbs_total: int | None = None
     targets: dict[str, float | int | None] = {}
 
-    if plan is not None:
+    # Workout source: the user's planner assignment for this weekday takes precedence;
+    # the PT plan's WeekdaySchedule is the fallback when no program is assigned. This is
+    # independent of the PT plan existing, so the planner drives the day on its own.
+    program = await program_for_weekday(session, user_id, weekday)
+    if program is not None:
+        workout = await _workout_block_from_program(session, program, day, user_id)
+    elif plan is not None:
         workout = await _workout_block(session, plan, weekday, day, user_id)
-        # Show a mobility section on workout days.
-        if workout is not None:
-            mobility = await _mobility_for(session, day, user_id)
+    # Show a mobility section on workout days.
+    if workout is not None:
+        mobility = await _mobility_for(session, day, user_id)
+
+    if plan is not None:
         plan_meals = (
             (
                 await session.execute(
