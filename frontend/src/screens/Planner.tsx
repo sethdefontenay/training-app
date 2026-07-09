@@ -79,9 +79,13 @@ export default function Planner() {
         </button>
       </div>
 
-      {/* Weekly schedule */}
+      {/* Recurring weekly schedule (persists for every future occurrence of each weekday). */}
       <section className="space-y-2">
-        <h2 className="font-semibold text-slate-300">This week</h2>
+        <h2 className="font-semibold text-slate-300">Weekly schedule</h2>
+        <p className="text-sm text-slate-400">
+          Applies to every week — e.g. a program on Thursday shows on all future Thursdays
+          until you change it.
+        </p>
         <div className="grid gap-2">
           {WEEKDAYS.map((wd) => (
             <div key={wd} className="flex items-center gap-3 rounded bg-slate-800 px-3 py-2">
