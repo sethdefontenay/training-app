@@ -44,6 +44,24 @@ async def test_get_today_tool_runs_without_plan(session: AsyncSession, user: Use
     assert out["has_plan"] is False  # type: ignore[index]
 
 
+async def test_planner_tools_create_add_list(session: AsyncSession, user: User) -> None:
+    created = await TOOLS_BY_NAME["create_program"].handler(
+        session, {"name": "Hub Program"}, user.id
+    )
+    pid = created["created"]["id"]  # type: ignore[index]
+    await TOOLS_BY_NAME["add_program_exercise"].handler(
+        session, {"program_id": pid, "exercise_slug": "hub-squat", "sets_x_reps": "5 × 5"}, user.id
+    )
+    await TOOLS_BY_NAME["assign_weekday_program"].handler(
+        session, {"weekday": "monday", "program_id": pid}, user.id
+    )
+    out = await TOOLS_BY_NAME["list_programs"].handler(session, {}, user.id)
+    prog = next(p for p in out["programs"] if p["id"] == pid)  # type: ignore[index]
+    assert prog["name"] == "Hub Program"
+    assert any(e["slug"] == "hub-squat" for e in prog["exercises"])
+    assert {"weekday": "monday", "program_id": pid} in out["schedule"]  # type: ignore[index]
+
+
 # --- agent loop (Claude mocked) ---
 
 

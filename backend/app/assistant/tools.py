@@ -25,14 +25,19 @@ from app.models import (
     Measurement,
     Plan,
     Prescription,
+    ProgramExercise,
     Session,
     SetEntry,
     SleepNight,
     StepsDay,
     TrainingDay,
+    User,
+    WeekdayProgram,
+    WorkoutProgram,
 )
 from app.schemas.tracking import _MEASUREMENT_FIELDS
 from app.services.daily import resolve_day
+from app.services.programs import import_training_days, list_programs, load_program
 from app.services.workouts import get_or_create_exercise, list_sessions, progress_series
 
 JSON = dict[str, object]
@@ -415,6 +420,171 @@ async def _record_measurement(session: AsyncSession, args: JSON, user_id: int) -
             setattr(row, f, float(str(args[f])))
     await session.commit()
     return {"date": day.isoformat(), **{f: getattr(row, f) for f in _MEASUREMENT_FIELDS}}
+
+
+# --- workout planner (the hub can build and modify programs) ---
+
+_WEEKDAY_PROP: JSON = {"type": "string", "description": "monday..sunday"}
+
+
+@tool(
+    "list_programs",
+    "List the user's workout programs (id, name, exercises) and their weekday->program "
+    "schedule. Call this first to get program ids before modifying anything.",
+    _EMPTY,
+)
+async def _list_programs(session: AsyncSession, args: JSON, user_id: int) -> object:
+    user = await session.get(User, user_id)
+    programs = await list_programs(session, user) if user else []
+    sched = (
+        (await session.execute(select(WeekdayProgram).where(WeekdayProgram.user_id == user_id)))
+        .scalars()
+        .all()
+    )
+    return {
+        "programs": [
+            {
+                "id": p.id,
+                "name": p.name,
+                "exercises": [
+                    {
+                        "slug": pe.exercise.slug,
+                        "name": pe.exercise.name,
+                        "sets_x_reps": pe.sets_x_reps,
+                        "prescribed_weight": pe.prescribed_weight,
+                    }
+                    for pe in sorted(p.exercises, key=lambda e: e.order)
+                ],
+            }
+            for p in programs
+        ],
+        "schedule": [{"weekday": w.weekday, "program_id": w.program_id} for w in sched],
+    }
+
+
+@tool(
+    "create_program",
+    "Create a new empty workout program. Returns its id.",
+    {"type": "object", "properties": {"name": {"type": "string"}}, "required": ["name"]},
+    writes=True,
+)
+async def _create_program(session: AsyncSession, args: JSON, user_id: int) -> object:
+    p = WorkoutProgram(user_id=user_id, name=str(args["name"]))
+    session.add(p)
+    await session.commit()
+    await session.refresh(p)
+    return {"created": {"id": p.id, "name": p.name}}
+
+
+@tool(
+    "add_program_exercise",
+    "Add an exercise to a program. A new exercise_slug becomes the user's custom exercise. "
+    "weight is optional (kg string).",
+    {
+        "type": "object",
+        "properties": {
+            "program_id": {"type": "integer"},
+            "exercise_slug": {"type": "string"},
+            "sets_x_reps": {"type": "string", "description": "e.g. '4 × 8'"},
+            "prescribed_weight": {"type": "string"},
+        },
+        "required": ["program_id", "exercise_slug", "sets_x_reps"],
+    },
+    writes=True,
+)
+async def _add_program_exercise(session: AsyncSession, args: JSON, user_id: int) -> object:
+    user = await session.get(User, user_id)
+    program = await load_program(session, int(str(args["program_id"])), user) if user else None
+    if program is None:
+        return {"error": "unknown program_id"}
+    ex = await get_or_create_exercise(session, str(args["exercise_slug"]), user_id)
+    session.add(
+        ProgramExercise(
+            program_id=program.id,
+            exercise_id=ex.id,
+            sets_x_reps=str(args["sets_x_reps"]),
+            prescribed_weight=(str(args.get("prescribed_weight")) or None)
+            if args.get("prescribed_weight")
+            else None,
+            order=len(program.exercises),
+        )
+    )
+    await session.commit()
+    return {"added": {"program_id": program.id, "exercise": ex.name}}
+
+
+@tool(
+    "remove_program_exercise",
+    "Remove an exercise (by slug) from a program.",
+    {
+        "type": "object",
+        "properties": {"program_id": {"type": "integer"}, "exercise_slug": {"type": "string"}},
+        "required": ["program_id", "exercise_slug"],
+    },
+    writes=True,
+)
+async def _remove_program_exercise(session: AsyncSession, args: JSON, user_id: int) -> object:
+    user = await session.get(User, user_id)
+    program = await load_program(session, int(str(args["program_id"])), user) if user else None
+    if program is None:
+        return {"error": "unknown program_id"}
+    slug = str(args["exercise_slug"])
+    match = next((pe for pe in program.exercises if pe.exercise.slug == slug), None)
+    if match is None:
+        return {"error": "exercise not in program"}
+    await session.delete(match)
+    await session.commit()
+    return {"removed": {"program_id": program.id, "exercise_slug": slug}}
+
+
+@tool(
+    "assign_weekday_program",
+    "Assign a program to a weekday (recurring, every week), or clear it with program_id=null "
+    "so that weekday falls back to the PT plan.",
+    {
+        "type": "object",
+        "properties": {"weekday": _WEEKDAY_PROP, "program_id": {"type": ["integer", "null"]}},
+        "required": ["weekday"],
+    },
+    writes=True,
+)
+async def _assign_weekday_program(session: AsyncSession, args: JSON, user_id: int) -> object:
+    weekday = str(args["weekday"]).lower()
+    existing = await session.scalar(
+        select(WeekdayProgram).where(
+            WeekdayProgram.user_id == user_id, WeekdayProgram.weekday == weekday
+        )
+    )
+    pid = args.get("program_id")
+    if pid is None:
+        if existing is not None:
+            await session.delete(existing)
+            await session.commit()
+        return {"weekday": weekday, "program_id": None}
+    user = await session.get(User, user_id)
+    program = await load_program(session, int(str(pid)), user) if user else None
+    if program is None:
+        return {"error": "unknown program_id"}
+    if existing is None:
+        session.add(WeekdayProgram(user_id=user_id, weekday=weekday, program_id=program.id))
+    else:
+        existing.program_id = program.id
+    await session.commit()
+    return {"weekday": weekday, "program_id": program.id}
+
+
+@tool(
+    "import_training_days",
+    "Create programs from the user's current PT plan's training days and pre-assign them to "
+    "the same weekdays. Skips programs whose name already exists. Returns counts.",
+    _EMPTY,
+    writes=True,
+)
+async def _import_training_days(session: AsyncSession, args: JSON, user_id: int) -> object:
+    user = await session.get(User, user_id)
+    if user is None:
+        return {"error": "unknown user"}
+    return await import_training_days(session, user)
 
 
 TOOLS: list[Tool] = _TOOLS
