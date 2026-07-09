@@ -41,27 +41,28 @@ def bdd_env() -> Iterator[dict[str, Any]]:
     os.close(fd)
     url = f"sqlite+aiosqlite:///{path}"
 
-    async def _setup() -> tuple[int, int]:
+    async def _setup() -> int:
         engine = create_async_engine(url)
         async with engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
         maker = async_sessionmaker(engine, expire_on_commit=False)
         async with maker() as s:
             owner = User(
-                email="seth@example.com", hashed_password=hash_password("pw"), role="owner"
+                email="seth@example.com",
+                hashed_password=hash_password("pw"),
+                is_admin=True,
+                has_diabetes=True,
+                has_health_integrations=True,
+                has_checkins=True,
             )
-            trainer = User(
-                email="coach@example.com", hashed_password=hash_password("pw"), role="trainer"
-            )
-            s.add_all([owner, trainer])
+            s.add(owner)
             await s.commit()
             await s.refresh(owner)
-            await s.refresh(trainer)
-            ids = (owner.id, trainer.id)
+            owner_id = owner.id
         await engine.dispose()
-        return ids
+        return owner_id
 
-    owner_id, trainer_id = asyncio.run(_setup())
+    owner_id = asyncio.run(_setup())
 
     app_engine = create_async_engine(url)
     maker = async_sessionmaker(app_engine, expire_on_commit=False)
@@ -71,7 +72,7 @@ def bdd_env() -> Iterator[dict[str, Any]]:
             yield s
 
     app.dependency_overrides[get_session] = _override
-    yield {"url": url, "owner_id": owner_id, "trainer_id": trainer_id}
+    yield {"url": url, "owner_id": owner_id}
     app.dependency_overrides.clear()
     os.unlink(path)
 
@@ -80,13 +81,6 @@ def bdd_env() -> Iterator[dict[str, Any]]:
 def bdd_client(bdd_env: dict[str, Any]) -> TestClient:
     client = TestClient(app)
     client.headers["Authorization"] = f"Bearer {create_access_token(str(bdd_env['owner_id']))}"
-    return client
-
-
-@pytest.fixture
-def trainer_client(bdd_env: dict[str, Any]) -> TestClient:
-    client = TestClient(app)
-    client.headers["Authorization"] = f"Bearer {create_access_token(str(bdd_env['trainer_id']))}"
     return client
 
 

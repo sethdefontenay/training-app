@@ -11,10 +11,6 @@ class User(Base, TimestampMixin):
     id: Mapped[int] = mapped_column(primary_key=True)
     email: Mapped[str] = mapped_column(unique=True, index=True)
     hashed_password: Mapped[str] = mapped_column()
-    # DEPRECATED: the owner/trainer role axis is retired in U8 (multiuser drops the
-    # read-only trainer). Kept here until enforce_role_access is removed so intermediate
-    # commits stay green.
-    role: Mapped[str] = mapped_column(default="owner", server_default="owner")
 
     # Admin (invite minting, user provisioning). Seth's account only.
     is_admin: Mapped[bool] = mapped_column(default=False, server_default="false")

@@ -32,7 +32,6 @@ async def chat(body: ChatIn, session: SessionDep, user: CurrentUser) -> ChatOut:
             session,
             [m.model_dump() for m in body.messages],
             user_id=user.id,
-            read_only=user.role == "trainer",
         )
     except AssistantNotConfigured as e:
         raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(e)) from e

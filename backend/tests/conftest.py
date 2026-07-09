@@ -102,23 +102,3 @@ async def auth_client(client: AsyncClient, user: User) -> AsyncClient:
     """A client carrying a valid bearer token for the seeded user."""
     client.headers["Authorization"] = f"Bearer {create_access_token(str(user.id))}"
     return client
-
-
-@pytest_asyncio.fixture
-async def trainer(session: AsyncSession) -> User:
-    u = User(
-        email="coach@example.com",
-        hashed_password=hash_password("correcthorse"),
-        role="trainer",
-    )
-    session.add(u)
-    await session.commit()
-    await session.refresh(u)
-    return u
-
-
-@pytest_asyncio.fixture
-async def trainer_client(client: AsyncClient, trainer: User) -> AsyncClient:
-    """A client carrying a valid bearer token for a read-only trainer login."""
-    client.headers["Authorization"] = f"Bearer {create_access_token(str(trainer.id))}"
-    return client

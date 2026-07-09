@@ -25,7 +25,7 @@ from app.api import (
 from app.api import (
     settings as settings_api,
 )
-from app.api.deps import enforce_role_access
+from app.api.deps import require_capability
 from app.config import get_settings
 from app.seed import create_user
 
@@ -63,9 +63,13 @@ async def health() -> dict[str, str]:
 
 # Versioned API surface. Use a router (NOT a mounted sub-app) so dependency overrides
 # and shared middleware apply uniformly.
-# The trainer read-only guard runs for every /api/v1 route (optional-auth, so it leaves
-# unauthed routes like /auth/login and /ping untouched).
-api_v1 = APIRouter(prefix="/api/v1", dependencies=[Depends(enforce_role_access)])
+api_v1 = APIRouter(prefix="/api/v1")
+
+# Capability-gated dependencies for the owner-only surfaces. Default-off flags mean an
+# invited (standard) user is denied these entirely; the owner has them all on.
+_diabetes_only = [Depends(require_capability("has_diabetes"))]
+_health_only = [Depends(require_capability("has_health_integrations"))]
+_checkins_only = [Depends(require_capability("has_checkins"))]
 
 
 @api_v1.get("/ping", tags=["meta"])
@@ -73,19 +77,22 @@ async def ping() -> dict[str, str]:
     return {"pong": "ok"}
 
 
+# Universal surface (every user): workouts, tracking, daily, shopping, assistant.
 api_v1.include_router(auth.router)
 api_v1.include_router(workouts.router)
 api_v1.include_router(tracking.router)
 api_v1.include_router(daily.router)
 api_v1.include_router(shopping.router)
-api_v1.include_router(checkin.router)
-api_v1.include_router(sync.router)
-api_v1.include_router(diabetes.router)
 api_v1.include_router(plans.router)
-api_v1.include_router(settings_api.router)
 api_v1.include_router(imports.router)
 api_v1.include_router(assistant.router)
-api_v1.include_router(sleep.router)
+
+# Owner-only surface, gated by per-user capability flags.
+api_v1.include_router(checkin.router, dependencies=_checkins_only)
+api_v1.include_router(sync.router, dependencies=_health_only)
+api_v1.include_router(settings_api.router, dependencies=_health_only)
+api_v1.include_router(sleep.router, dependencies=_health_only)
+api_v1.include_router(diabetes.router, dependencies=_diabetes_only)
 
 app.include_router(api_v1)
 
