@@ -4,11 +4,11 @@ import secrets
 from urllib.parse import urlencode
 
 import httpx
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 from fastapi.responses import RedirectResponse
 from pydantic import BaseModel
 
-from app.api.deps import CurrentUser, SessionDep
+from app.api.deps import CurrentUser, SessionDep, require_capability
 from app.config import get_settings
 from app.services.settings import (
     GOOGLE_HEALTH_FIELDS,
@@ -19,7 +19,17 @@ from app.services.settings import (
     tidepool_config,
 )
 
-router = APIRouter(prefix="/settings", tags=["settings"])
+# Authenticated integration-management endpoints — owner-only (has_health_integrations).
+router = APIRouter(
+    prefix="/settings",
+    tags=["settings"],
+    dependencies=[Depends(require_capability("has_health_integrations"))],
+)
+
+# OAuth connect flow. These are top-level browser navigations (the Reconnect button and
+# Google's redirect back), which cannot carry a bearer token — so they must NOT be behind
+# the auth/capability gate. Kept on a separate, ungated router.
+oauth_router = APIRouter(prefix="/settings", tags=["settings"])
 
 _settings = get_settings()
 _GOOGLE_AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth"
@@ -104,7 +114,7 @@ async def tidepool_save(
 # --- OAuth connect flow (browser navigations — not bearer-authenticated) ---
 
 
-@router.get("/google-health/authorize")
+@oauth_router.get("/google-health/authorize")
 async def google_health_authorize(session: SessionDep) -> RedirectResponse:
     cfg = await google_health_config(session)
     if not cfg["client_id"]:
@@ -124,7 +134,7 @@ async def google_health_authorize(session: SessionDep) -> RedirectResponse:
     return RedirectResponse(f"{_GOOGLE_AUTH_URL}?{urlencode(params)}")
 
 
-@router.get("/google-health/callback")
+@oauth_router.get("/google-health/callback")
 async def google_health_callback(
     session: SessionDep,
     code: str | None = None,

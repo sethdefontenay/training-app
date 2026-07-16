@@ -53,6 +53,18 @@ async def test_owner_reaches_owner_only_surfaces(auth_client: AsyncClient) -> No
         assert (await auth_client.get(path)).status_code != 403
 
 
+async def test_google_oauth_endpoints_are_unauthenticated(client: AsyncClient) -> None:
+    # The Reconnect button and Google's callback are top-level browser navigations that
+    # cannot carry a bearer token, so authorize/callback must NOT sit behind the auth or
+    # capability gate. They redirect (missing_client / denied), never 401/403.
+    r = await client.get("/api/v1/settings/google-health/authorize", follow_redirects=False)
+    assert r.status_code not in (401, 403), r.status_code
+    c = await client.get(
+        "/api/v1/settings/google-health/callback?error=denied", follow_redirects=False
+    )
+    assert c.status_code not in (401, 403), c.status_code
+
+
 async def test_standard_user_keeps_universal_surface(other_client: AsyncClient) -> None:
     # Workouts, daily, measurements, shopping remain available to every user.
     assert (await other_client.get("/api/v1/sessions")).status_code == 200

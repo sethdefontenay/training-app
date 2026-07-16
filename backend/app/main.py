@@ -94,7 +94,10 @@ api_v1.include_router(assistant.router)
 # Owner-only surface, gated by per-user capability flags.
 api_v1.include_router(checkin.router, dependencies=_checkins_only)
 api_v1.include_router(sync.router, dependencies=_health_only)
-api_v1.include_router(settings_api.router, dependencies=_health_only)
+# settings.router is self-gated (has_health_integrations); its oauth_router is intentionally
+# ungated — the Google OAuth browser navigations can't carry a bearer token.
+api_v1.include_router(settings_api.router)
+api_v1.include_router(settings_api.oauth_router)
 api_v1.include_router(sleep.router, dependencies=_health_only)
 api_v1.include_router(diabetes.router, dependencies=_diabetes_only)
 
