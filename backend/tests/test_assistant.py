@@ -1,6 +1,6 @@
 """Assistant: tool handlers, the agent loop (mocked Claude), and the chat endpoint."""
 
-from datetime import date
+from datetime import date, timedelta
 
 import anthropic
 from httpx import AsyncClient
@@ -159,3 +159,51 @@ async def test_mcp_call_tool_dispatches(sessionmaker, user: User, monkeypatch) -
     assert isinstance(out, list)
     bad = json.loads(await mcp_server.call_mcp_tool("nope", {}))
     assert "error" in bad
+
+
+# --- the Roundup skill (prompt-defined) ---
+
+
+def test_roundup_skill_present_in_system_prompt() -> None:
+    """The roundup is a behavioural contract carried entirely by the system prompt, so a
+    trim of _SYSTEM would silently break it. Guard the load-bearing instructions."""
+    p = agent_mod._SYSTEM
+    assert "Roundup" in p
+    # The whole point: a fixed calendar week, never a rolling lookback from today.
+    assert "Monday-to-Sunday" in p
+    assert "NEVER the seven days preceding" in p
+    # The three sections Seth asked for.
+    assert "get_measurements with limit=2" in p
+    assert "get_steps_sleep with days=14" in p
+    assert "Divide both totals by 7" in p
+    # Strictness: the agent must not pick its own measurement dates, must print every
+    # measure (it previously dropped the thighs), and must give figures not trends.
+    assert "Use EXACTLY the two rows it returns" in p
+    for field in (
+        "waist_cm",
+        "tummy_cm",
+        "bum_cm",
+        "right_thigh_cm",
+        "left_thigh_cm",
+        "weight_kg",
+    ):
+        assert field in p
+    assert "Never drop a row" in p
+    assert "Report figures, not interpretation." in p
+    # Missing days mean a sync gap, not a real zero.
+    assert "Google Health sync" in p
+
+
+def test_fourteen_day_lookback_reaches_the_previous_week_from_any_weekday() -> None:
+    """The prompt tells the agent to call get_steps_sleep(days=14). That tool only looks
+    back from today, so 14 must cover the previous Mon-Sun week no matter which day the
+    roundup is asked on — Sunday is the worst case, needing exactly 14."""
+    needed = []
+    for offset in range(7):
+        today = date(2026, 9, 7) + timedelta(days=offset)  # Mon 2026-09-07 .. Sun 2026-09-13
+        start = today - timedelta(days=today.weekday()) - timedelta(days=7)
+        end = start + timedelta(days=6)
+        assert start.weekday() == 0 and end.weekday() == 6
+        assert (start, end) == (date(2026, 8, 31), date(2026, 9, 6))  # stable all week
+        needed.append((today - start).days + 1)  # inclusive-of-today lookback
+    assert max(needed) == 14
